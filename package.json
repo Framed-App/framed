@@ -1,0 +1,19 @@
+{
+  "name": "framed",
+  "version": "0.0.1",
+  "description": "Framed allows you to find the cause of dropped frames while streaming",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TrueWinter/framed.git"
+  },
+  "author": "TrueWinter",
+  "license": "GPL-2.0",
+  "bugs": {
+    "url": "https://github.com/TrueWinter/framed/issues"
+  },
+  "homepage": "https://github.com/TrueWinter/framed#readme"
+}
