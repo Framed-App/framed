@@ -11,9 +11,15 @@
     "url": "git+https://github.com/TrueWinter/framed.git"
   },
   "author": "TrueWinter",
-  "license": "GPL-2.0",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/TrueWinter/framed/issues"
   },
-  "homepage": "https://github.com/TrueWinter/framed#readme"
+  "homepage": "https://github.com/TrueWinter/framed#readme",
+  "dependencies": {
+    "axios": "^0.21.4",
+    "json-rpc-2.0": "^0.2.18",
+    "sockjs-client": "^1.5.2",
+    "tcp-ping": "^0.1.1"
+  }
 }
