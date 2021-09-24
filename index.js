@@ -41,7 +41,9 @@ function initStreamDiagnosticsData() {
 			twitch: {},
 			google: {},
 			truewinter: {}
-		}
+		},
+		processes: {},
+		network: {}
 	};
 }
 
@@ -233,6 +235,25 @@ function runDiagnostics(timestamp) {
 		}
 
 		_streamDiagnosticsData.pings.truewinter[timestamp] = Math.round(data.avg * 100) / 100;
+	});
+
+	utils.getProcessesMemAndCPU(function(err, data) {
+		if (err) {
+			return console.error(err);
+		}
+
+		var _cpu = data.cpuOverCores;
+		var _mem = data.totalMem;
+		var _processes = data.processes;
+
+		var _processList = [];
+
+		for (var p in _processes) {
+			// Ignore if CPU is less than 1% or memory is less than 10MB
+			if (p.cpu > 1 && p.mem > 10485760) {
+				_processList.push(p);
+			}
+		}
 	});
 
 	console.log(_streamDiagnosticsData);

@@ -19,7 +19,9 @@
   "dependencies": {
     "axios": "^0.21.4",
     "json-rpc-2.0": "^0.2.18",
+    "process-list": "^2.0.0",
     "sockjs-client": "^1.5.2",
-    "tcp-ping": "^0.1.1"
+    "tcp-ping": "^0.1.1",
+    "win-proc-info": "0.0.2"
   }
 }
