@@ -394,8 +394,8 @@ void sys_mem() {
 	DWORDLONG totalPhysMem = memInfo.ullTotalPhys;
 	DWORDLONG physMemUsed = memInfo.ullTotalPhys - memInfo.ullAvailPhys;
 
-	tcout << "__framed_sys-0: memTotal: " << totalPhysMem << "\n";
-	tcout << "__framed-sys-0: memUsed: " << physMemUsed << "\n";
+	tcout << "__framed_sys-mem: memTotal: " << totalPhysMem << "\n";
+	tcout << "__framed-sys-mem: memUsed: " << physMemUsed << "\n";
 }
 
 static PIP_ADAPTER_ADDRESSES

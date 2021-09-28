@@ -10,7 +10,19 @@ var _eventEmitter = null;
 // and save the counter value. Do not emit
 // event on first run.
 var firstRun = true;
-var prevCounters = {};
+var prevCounters = {
+	system: {
+		network: {
+			inBytes: 0,
+			outBytes: 0
+		},
+		disk: {
+			read: 0,
+			write: 0
+		}
+	},
+	programs: {}
+};
 
 function run() {
 	if (_eventEmitter === null) {
@@ -45,6 +57,10 @@ function run() {
 				outErrors: 0,
 				inDiscards: 0,
 				outDiscards: 0
+			},
+			disk: {
+				read: 0,
+				write: 0
 			}
 		},
 		programs: {}
@@ -68,7 +84,7 @@ function run() {
 		var t2 = Date.now();
 		console.log(t2 - t1);
 		//console.log(cmdOutput);
-		// __framed_sys contains:
+		// __framed_sys_mem contains:
 		//   + memTotal
 		//   + memUsed
 		// __framed_sys_net-[0-9]+ contains:
@@ -88,6 +104,8 @@ function run() {
 		prevFinished = true;
 	});
 }
+
+function 
 
 function init(eventEmitter) {
 	_eventEmitter = eventEmitter;
