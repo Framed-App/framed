@@ -54,12 +54,12 @@ function getProcessesMemAndCPU(cb) {
 
 	var _ignoreList = ['System Idle Process'];
 
-	snapshot('name', 'vmem', 'pmem', 'cpu', 'pid').then(function(data) {
+	snapshot('name', 'pmem', 'cpu', 'pid').then(function(data) {
 		data.forEach(function (d) {
-			if (d.name.includes('Spotify')) {
+			/*if (d.name.includes('Spotify')) {
 				console.log(d);
 				console.log(`V: ${convertBytes(d.pmem)}`);
-			}
+			}*/
 
 			if (!_ignoreList.includes(d.name)) {
 				if (!Object.prototype.hasOwnProperty.call(_data, d.name)) {
@@ -71,19 +71,23 @@ function getProcessesMemAndCPU(cb) {
 
 				_data[d.name].mem += parseInt(d.pmem);
 				_data[d.name].cpu += d.cpu;
-				totalMem += parseInt(d.pmem);
+				//totalMem += parseInt(d.pmem);
 				totalCPU += d.cpu;
 			}
 		});
 
-		cpuOverCores = totalCPU / os.cpus().length;
+		for (var _d in _data) {
+			_data[_d].cpu = Math.round(_data[_d].cpu * 1000) / 1000;
+		}
 
-		console.log(totalMem);
-		console.log(convertBytes(totalMem));
+		cpuOverCores = Math.round(totalCPU / os.cpus().length * 1000) / 1000;
+
+		//console.log(totalMem);
+		//console.log(convertBytes(totalMem));
 
 		cb(null, {
 			processes: _data,
-			totalMem,
+			//totalMem,
 			totalCPU,
 			cpuOverCores
 		});
