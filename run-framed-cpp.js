@@ -32,6 +32,23 @@ function run() {
 	missedRunsSinceLastSuccess = 0;
 
 	var t1 = Date.now();
+	var jsonOutput = {
+		system: {
+			memory: {
+				memTotal: 0,
+				memUsed: 0
+			},
+			network: {
+				inBytes: 0,
+				outBytes: 0,
+				inErrors: 0,
+				outErrors: 0,
+				inDiscards: 0,
+				outDiscards: 0
+			}
+		},
+		programs: {}
+	};
 	var child = spawn('framed-cpp-api.exe');
 
 	var cmdOutput = '';
@@ -54,17 +71,20 @@ function run() {
 		// __framed_sys contains:
 		//   + memTotal
 		//   + memUsed
-		// __framed_sys_net-[0-9]+: contains:
+		// __framed_sys_net-[0-9]+ contains:
 		//   + inBytes
 		//   + outBytes
 		//   + inErrors
 		//   + outErrors
 		//   + inDiscards
 		//   + outDiscards
-		// All others contain:
-		//   + mem
+		// __framed_sys_disk-c contains:
 		//   + read
 		//   + write
+		// All others contain:
+		//   + mem
+		//   + ioRead
+		//   + ioWrite
 		prevFinished = true;
 	});
 }

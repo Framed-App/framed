@@ -45,6 +45,7 @@
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
 #include <netioapi.h>
+#include <winioctl.h>
 
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "netio.lib")
@@ -364,7 +365,7 @@ void proc_memory_uss(DWORD pid) {
     }
 
 	// While this won't give the exact value that task manager shows, it should be close enough to be a useful metric
-	tcout << getProcessName(pid) << "-" << pid << ": mem:" << wsCounters.NumberOfPrivatePages * psutil_getpagesize() << "\n";
+	tcout << getProcessName(pid) << "-" << pid << ": mem: " << wsCounters.NumberOfPrivatePages * psutil_getpagesize() << "\n";
 
 	HeapFree(GetProcessHeap(), 0, wsInfo);
     CloseHandle(hProcess);
@@ -379,8 +380,8 @@ void proc_io(DWORD pid) {
         return;
 
 	if (GetProcessIoCounters(hProcess, &ioCounters)) {
-		tcout << getProcessName(pid) << "-" << pid << ": read: " << ioCounters.ReadTransferCount << "\n";
-		tcout << getProcessName(pid) << "-" << pid << ": write: " << ioCounters.WriteTransferCount << "\n";
+		tcout << getProcessName(pid) << "-" << pid << ": ioRead: " << ioCounters.ReadTransferCount << "\n";
+		tcout << getProcessName(pid) << "-" << pid << ": ioWrite: " << ioCounters.WriteTransferCount << "\n";
 	}
 
 	CloseHandle(hProcess);
@@ -476,6 +477,40 @@ void psutil_net_io_counters() {
     FREE(pAddresses);
 }
 
+void sys_disk() { 
+    HANDLE dev = CreateFile("\\\\.\\C:", 
+        FILE_READ_ATTRIBUTES, 
+        FILE_SHARE_READ | FILE_SHARE_WRITE, 
+        NULL, 
+        OPEN_EXISTING, 
+        0, 
+        NULL);
+
+    DISK_PERFORMANCE disk_info { };
+    DWORD bytes;
+
+    if (dev == INVALID_HANDLE_VALUE) {
+        std::cerr << "Error opening disk\n";
+        return;
+    }
+
+    if (!DeviceIoControl(dev, 
+            IOCTL_DISK_PERFORMANCE, 
+            NULL, 
+            0, 
+            &disk_info, 
+            sizeof(disk_info), 
+            &bytes, 
+            NULL))
+    {
+        std::cerr << "Failure in DeviceIoControl\n";
+        return;
+    }
+
+    std::cout << "__framed_sys_disk-c: read: " << disk_info.BytesRead.QuadPart << "\n";
+    std::cout << "__framed_sys_disk-c: write: " << disk_info.BytesWritten.QuadPart << "\n";
+}
+
 BOOL IsElevated( ) {
     BOOL fRet = FALSE;
     HANDLE hToken = NULL;
@@ -499,8 +534,8 @@ int main( void ) {
 	}
 
 	sys_mem();
-	// TODO: Fix this function stopping anything else from running
 	psutil_net_io_counters();
+	sys_disk();
 
 	WTS_PROCESS_INFO* processes = NULL;
 	DWORD count = 0;
