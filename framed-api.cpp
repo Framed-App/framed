@@ -8,7 +8,10 @@
 // I ported only the needed code into a standalone executable.
 // Yes, it's shit code. But it meets my requirements for this project:
 // - Runs in less than a second
-//   + My tests indicate that it runs in around 500-700ms, not great but still acceptable
+//   + My tests indicate that it runs in around 500-700ms (with many processes running)
+//     or around 330ms (with few processes running), not great but still acceptable.
+//     The Node.js file that runs the executable has code to detect if it takes longer than 1 second,
+//     and waits until it's done before running again. An average value is shown to the user in this case.
 //   + I could get the psutil library to run faster by splitting the processes into 10 equal
 //     length arrays and running 10 instances of a Python script, but this caused high CPU usage
 // - Doesn't require admin
@@ -22,8 +25,10 @@
 //   + With the Python approach, the user would need to install Python and add it to their path for
 //     it to be usable. The other alternative was including all the required Python files with the Framed app,
 //     but this was undesirable for multiple reasons
-// PS: Are you a C++ developer with knowledge of Windows APIs? I could use some help improving this code
-//     and making it run even faster.
+// PS: Are you a C++ developer with knowledge of Windows APIs (and possibly Node.js native modules)?
+//     I could use some help improving this code and making it run even faster. Initially, this was
+//     intended to be a Node.js native module, but I had issues getting that working so made it
+//     a standalone executable.
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -456,13 +461,13 @@ void psutil_net_io_counters() {
             return;
         }
 
-		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": " << pIfRow->OutOctets << "\n";
-		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": " << pIfRow->InOctets << "\n";
-		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": " << pIfRow->InErrors << "\n";
-		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": " << pIfRow->OutErrors << "\n";
-		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": " << pIfRow->InDiscards << "\n";
-		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": " << pIfRow->OutDiscards << "\n";
-		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": " << pIfRow->Type << "\n";
+		// Would preferably want the actual interface name, but this works too
+		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": inBytes: " << pIfRow->InOctets << "\n";
+		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": outBytes: " << pIfRow->OutOctets << "\n";
+		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": inErrors: " << pIfRow->InErrors << "\n";
+		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": outErrors: " << pIfRow->OutErrors << "\n";
+		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": inDiscards: " << pIfRow->InDiscards << "\n";
+		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": outDiscards: " << pIfRow->OutDiscards << "\n";
 
         FREE(pIfRow);
         pCurrAddresses = pCurrAddresses->Next;

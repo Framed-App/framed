@@ -51,8 +51,20 @@ function run() {
 		var t2 = Date.now();
 		console.log(t2 - t1);
 		//console.log(cmdOutput);
-		// __framed_sys contains memTotal and memUsed
-		// All others contain mem, read, and write
+		// __framed_sys contains:
+		//   + memTotal
+		//   + memUsed
+		// __framed_sys_net-[0-9]+: contains:
+		//   + inBytes
+		//   + outBytes
+		//   + inErrors
+		//   + outErrors
+		//   + inDiscards
+		//   + outDiscards
+		// All others contain:
+		//   + mem
+		//   + read
+		//   + write
 		prevFinished = true;
 	});
 }
