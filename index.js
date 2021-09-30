@@ -101,6 +101,7 @@ sock.onmessage = function(e) {
 		case 'state':
 			if (data.result.streamingStatus === 'live' && _interval === null) {
 				console.log('App opened after streamer went live');
+				// Don't count dropped frames from before Framed was opened
 				_ignoreNextDroppedFrames = true;
 				getPerformance();
 				_interval = setInterval(function() {
@@ -174,42 +175,15 @@ function handlePerformanceData(data) {
 	}
 }
 
-function parseCity(name) {
-	var _current = name;
-	if (_current.includes(':')) {
-		_current = _current.split(':')[1];
-	}
-
-	if (_current.includes(',')) {
-		// Twitch, just why?!
-		if (name.startsWith('US')) {
-			_current = _current.split(',')[0];
-		} else {
-			_current = _current.split(',')[1];
-		}
-	}
-
-	if (_current.startsWith(' ')) {
-		_current = _current.replace(/^ /, '');
-	}
-
-	return _current;
-}
-
-function parseHost(host) {
-	var _u = new URL(host);
-	return _u.host;
-}
-
 function runDiagnostics(timestamp) {
-	var _pingServers = getRandomTwitchServers();
+	var _pingServers = utils.getRandomTwitchServers(_servers, _userContinent);
 	_streamDiagnosticsData.pings.twitch[timestamp] = [];
 	console.log(_pingServers);
 	for (var i = 0; i < _pingServers.length; i++) {
-		let _pingLocation = parseCity(_pingServers[i].name);
+		let _pingLocation = utils.parseCity(_pingServers[i].name);
 		console.log(`Pinging Twitch ingest server in ${_pingLocation}`);
 
-		utils.tcpPing(parseHost(_pingServers[i].url_template), 1935, function(err, data) {
+		utils.tcpPing(utils.parseHost(_pingServers[i].url_template), 1935, function(err, data) {
 			if (err) {
 				return console.error(err);
 			}
@@ -237,25 +211,6 @@ function runDiagnostics(timestamp) {
 		_streamDiagnosticsData.pings.truewinter[timestamp] = Math.round(data.avg * 100) / 100;
 	});
 
-	utils.getProcessesMemAndCPU(function(err, data) {
-		if (err) {
-			return console.error(err);
-		}
-
-		var _cpu = data.cpuOverCores;
-		var _mem = data.totalMem;
-		var _processes = data.processes;
-
-		var _processList = [];
-
-		for (var p in _processes) {
-			// Ignore if CPU is less than 1% or memory is less than 10MB
-			if (p.cpu > 1 && p.mem > 10485760) {
-				_processList.push(p);
-			}
-		}
-	});
-
 	console.log(_streamDiagnosticsData);
 }
 
@@ -271,105 +226,3 @@ Array.prototype.remove = function() {
 	}
 	return this;
 };
-
-function getRandomTwitchServers() {
-	var _returnCount = 3;
-	var _returnArr = [];
-
-	if (_servers.length < 3) {
-		return [];
-	}
-
-	if (_userContinent) {
-		var _pingServers = getServersIn(_userContinent);
-
-		for (var i = 0; i < _returnCount; i++) {
-			var _p = _pingServers[Math.floor(Math.random() * _pingServers.length)];
-			if (_p) {
-				_returnArr.push(_p);
-				console.log('adding _pingServers');
-				_pingServers.remove(_p);
-			}
-		}
-
-		if (_pingServers.length < 3) {
-			console.log('User continent contains less than 3 servers');
-
-			var _altLocations = {
-				AF: 'EU',
-				AS: 'EU',
-				NA: 'EU',
-				SA: 'NA',
-				EU: 'NA',
-				OC: 'NA',
-				AN: 'SA'
-			};
-
-			var _altServers = getServersIn(_altLocations[_userContinent]);
-
-			console.log(_altServers.length);
-			console.log(_returnCount);
-			console.log(_returnArr.length);
-			console.log(_returnCount - _returnArr.length);
-
-			var _runTimes = _returnCount - _returnArr.length;
-
-			for (var j = 0; j < _runTimes; j++) {
-				var _a = _altServers[Math.floor(Math.random() * _altServers.length)];
-				console.log(':thinking:');
-				if (_a) {
-					_returnArr.push(_a);
-					console.log('adding _altServers');
-					_altServers.remove(_p);
-				}
-			}
-		}
-	} else {
-		console.log('User continent blank');
-
-		// Create copy
-		var _serversTmp = _servers.slice();
-
-		for (var k = 0; k < _returnCount; k++) {
-			var _s = _serversTmp[Math.floor(Math.random() * _serversTmp.length)];
-			if (_s) {
-				_returnArr.push(_s);
-				console.log('adding _serversTmp');
-				_serversTmp.remove(_s);
-			}
-		}
-	}
-
-	return _returnArr;
-}
-
-function getServersIn(continent) {
-	// Thanks Twitch for having multiple NA locations with different names
-	var _twitchLocations = {
-		Europe: 'EU',
-		Asia: 'AS',
-		'South America': 'SA',
-		Australia: 'OC',
-		'US East': 'NA',
-		NA: 'NA',
-		'US Central': 'NA',
-		'US West': 'NA'
-	};
-
-	var _returnArr = [];
-
-	_servers.forEach(function(s) {
-		var _location = s.name.split(':')[0];
-		var _convertedLocation = _twitchLocations[_location];
-
-		// Ensures that this won't break by Twitch expanding into new locations
-		// PS: Twitch, consider add South African servers
-		if (_convertedLocation) {
-			if (_convertedLocation === continent) {
-				_returnArr.push(s);
-			}
-		}
-	});
-
-	return _returnArr;
-}

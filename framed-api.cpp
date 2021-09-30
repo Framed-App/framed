@@ -16,7 +16,7 @@
 //     length arrays and running 10 instances of a Python script, but this caused high CPU usage
 // - Doesn't require admin
 //   + In fact, it will quit if run as admin. See main function for more info
-// - Doesn't use much CPU
+// - ~~Doesn't use much CPU~~ Actually, it does :( See comments in main() for more information
 //   + This is probably the most important requirement. The whole purpose of Framed is
 //     to help streamers find the cause of dropped frames. The most common causes for this are
 //     network issues, high network usage, and high CPU usage. Wouldn't want Framed to be causing
@@ -46,6 +46,12 @@
 #include <iphlpapi.h>
 #include <netioapi.h>
 #include <winioctl.h>
+#include <vector>
+#include <ctime>
+#include <chrono>
+#include <cmath>
+//#include <d3dkmthk.h>
+//#include <cfgmgr32.h>
 
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "netio.lib")
@@ -95,6 +101,7 @@ SYSTEM_INFO PSUTIL_SYSTEM_INFO;
 #define STATUS_NOT_FOUND ((NTSTATUS)0xC0000225L)
 #define STATUS_BUFFER_OVERFLOW ((NTSTATUS)0x80000005L)
 
+// This was for added displaying network interface names. Keeping it for future use
 // https://stackoverflow.com/a/5165240
 #if defined(UNICODE) || defined(_UNICODE)
 #define tcout std::wcout
@@ -237,7 +244,7 @@ psutil_GetProcWsetInformation(
     PVOID buffer;
     SIZE_T bufferSize;
 
-    bufferSize = 0x8000;
+    bufferSize = 150000;
     buffer = MALLOC_ZERO(bufferSize);
     if (! buffer) {
         //PyErr_NoMemory();
@@ -256,30 +263,15 @@ psutil_GetProcWsetInformation(
         bufferSize *= 2;
         // Fail if we're resizing the buffer to something very large.
         if (bufferSize > 256 * 1024 * 1024) {
-            /*PyErr_SetString(PyExc_RuntimeError,
-                            "NtQueryVirtualMemory bufsize is too large");*/
             return 1;
         }
         buffer = MALLOC_ZERO(bufferSize);
         if (! buffer) {
-            //PyErr_NoMemory();
             return 1;
         }
     }
 
     if (!NT_SUCCESS(status)) {
-        if (status == STATUS_ACCESS_DENIED) {
-            //AccessDenied("NtQueryVirtualMemory -> STATUS_ACCESS_DENIED");
-			return 1;
-        }
-        else if (psutil_pid_is_running(pid) == 0) {
-            //NoSuchProcess("psutil_pid_is_running -> 0");
-        }
-        else {
-            /*PyErr_Clear();
-            psutil_SetFromNTStatusErr(
-                status, "NtQueryVirtualMemory(MemoryWorkingSetInformation)");*/
-        }
         HeapFree(GetProcessHeap(), 0, buffer);
         return 1;
     }
@@ -358,7 +350,7 @@ void proc_memory_uss(DWORD pid) {
 
         // This is what we do: count shared pages that only one process
         // is using as private (USS).
-        if (!wsInfo->WorkingSetInfo[i].Shared ||
+		if (!wsInfo->WorkingSetInfo[i].Shared ||
                 wsInfo->WorkingSetInfo[i].ShareCount <= 1) {
             wsCounters.NumberOfPrivatePages++;
         }
@@ -394,8 +386,8 @@ void sys_mem() {
 	DWORDLONG totalPhysMem = memInfo.ullTotalPhys;
 	DWORDLONG physMemUsed = memInfo.ullTotalPhys - memInfo.ullAvailPhys;
 
-	tcout << "__framed_sys-mem: memTotal: " << totalPhysMem << "\n";
-	tcout << "__framed-sys-mem: memUsed: " << physMemUsed << "\n";
+	tcout << "__framed_sys_mem: memTotal: " << totalPhysMem << "\n";
+	tcout << "__framed_sys_mem: memUsed: " << physMemUsed << "\n";
 }
 
 static PIP_ADAPTER_ADDRESSES
@@ -439,12 +431,18 @@ void psutil_net_io_counters() {
     PIP_ADAPTER_ADDRESSES pAddresses = NULL;
     PIP_ADAPTER_ADDRESSES pCurrAddresses = NULL;
 
+	// Assume that the first non-zero counter interface is the main interface
+	BOOL interfaceFound = false;
+
     pAddresses = psutil_get_nic_addresses();
     if (pAddresses == NULL)
         return;
     pCurrAddresses = pAddresses;
 
     while (pCurrAddresses) {
+		if (interfaceFound) {
+			break;
+		}
         pIfRow = (MIB_IF_ROW2 *) MALLOC_ZERO(sizeof(MIB_IF_ROW2));
         if (pIfRow == NULL) {
             //PyErr_NoMemory();
@@ -462,6 +460,12 @@ void psutil_net_io_counters() {
             return;
         }
 
+		if (pIfRow->InOctets == 0 && pIfRow->OutOctets == 0) {
+			FREE(pIfRow);
+			pCurrAddresses = pCurrAddresses->Next;
+			continue;
+		}
+
 		// Would preferably want the actual interface name, but this works too
 		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": inBytes: " << pIfRow->InOctets << "\n";
 		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": outBytes: " << pIfRow->OutOctets << "\n";
@@ -469,6 +473,8 @@ void psutil_net_io_counters() {
 		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": outErrors: " << pIfRow->OutErrors << "\n";
 		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": inDiscards: " << pIfRow->InDiscards << "\n";
 		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": outDiscards: " << pIfRow->OutDiscards << "\n";
+
+		interfaceFound = true;
 
         FREE(pIfRow);
         pCurrAddresses = pCurrAddresses->Next;
@@ -511,6 +517,208 @@ void sys_disk() {
     std::cout << "__framed_sys_disk-c: write: " << disk_info.BytesWritten.QuadPart << "\n";
 }
 
+uint64_t getEpochTime() {
+	return std::chrono::duration_cast< std::chrono::milliseconds >(
+    	std::chrono::system_clock::now().time_since_epoch()
+	).count();
+}
+
+std::chrono::milliseconds getDifferenceBetweenTimes(std::chrono::milliseconds t1, std::chrono::milliseconds t2) {
+	return std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+}
+
+struct processCPUTime {
+	DWORD pid;
+	tstring processName;
+	double userTime;
+	double systemTime;
+	uint64_t initTime;
+};
+
+std::vector<processCPUTime> processCPUTimes;
+
+double filetime_to_double(struct _FILETIME &ft) {
+	unsigned long long t = ft.dwLowDateTime + ((unsigned long long)ft.dwHighDateTime << 32);
+	// t is in 100 nano second increments
+	// 1e6 is the conversion from nanosecond to millisecond
+	return t / 1e6 * 100;
+}
+
+int getCPUTime(DWORD pid, processCPUTime* p) {
+	HANDLE hProcess;
+	FILETIME createTime;
+	FILETIME exitTime;
+	FILETIME kernelTime;
+	FILETIME userTime;
+
+	hProcess = OpenProcess( PROCESS_QUERY_INFORMATION, FALSE, pid );
+    if (hProcess == NULL)
+        return 0;
+
+	if (GetProcessTimes(hProcess, &createTime, &exitTime, &kernelTime, &userTime)) {
+		//processCPUTime p;
+		p->pid = pid;
+		p->processName = getProcessName(pid);
+		p->userTime = filetime_to_double(userTime);
+		p->systemTime = filetime_to_double(kernelTime);
+		p->initTime = getEpochTime();
+
+		CloseHandle(hProcess);
+		//return p;
+		return 1;
+	}
+
+	CloseHandle(hProcess);
+	return 0;
+}
+
+void storeInitialCPUTimes(DWORD pid) {
+	processCPUTime p;
+	
+	if (getCPUTime(pid, &p)) {
+		processCPUTimes.push_back(p);
+	}
+}
+
+void getAwaitedCPUTimes() {
+	for (int i = 0; i < processCPUTimes.size(); i++) {
+		processCPUTime p = processCPUTimes[i];
+		if (psutil_pid_is_running(p.pid) == 0) {
+			continue;
+		}
+
+		processCPUTime pNow;
+		
+		if (!getCPUTime(p.pid, &pNow)) {
+			continue;
+		}
+
+		double userTime = pNow.userTime - p.userTime;
+		double systemTime = pNow.systemTime - p.systemTime;
+
+		double cpuT = static_cast<double>(userTime + systemTime) / (pNow.initTime - p.initTime);
+		double cpu = cpuT * 100.0;
+
+		/*tcout << p.processName << "-" << p.pid << ": user: " << p.userTime << "\n";
+		tcout << p.processName << "-" << p.pid << ": system: " << p.systemTime << "\n";
+		tcout << p.processName << "-" << p.pid << ": time: " << p.initTime << "\n";
+		tcout << p.processName << "-" << p.pid << ": cpu: " << cpu << "\n";
+		tcout << p.processName << "-" << p.pid << ": cpuP: " << std::ceil(cpu * 100.0) / 100.0 << "\n";
+
+		tcout << pNow.processName << "-" << pNow.pid << ": usern: " << pNow.userTime << "\n";
+		tcout << pNow.processName << "-" << pNow.pid << ": systemn: " << pNow.systemTime << "\n";
+		tcout << pNow.processName << "-" << pNow.pid << ": timen: " << pNow.initTime << "\n";
+		tcout << pNow.processName << "-" << pNow.pid << ": timed: " << (pNow.initTime - p.initTime) << "\n";*/
+
+		// TODO: Fix a bug where this sometimes shows 0%
+		tcout << p.processName << "-" << p.pid << ": cpu: " << std::ceil(cpu * 100.0) / 100.0 << "\n";
+	}
+}
+
+// Without d3dkmthk.h, this function isn't useful
+/*int sys_gpu() {
+	D3DKMT_QUERYSTATISTICS queryStatistics;
+	CONFIGRET cr = CR_SUCCESS;
+	PWSTR DeviceInterfaceList = NULL;
+    ULONG DeviceInterfaceListLength = 0;
+
+	cr = CM_Get_Device_Interface_List_Size(&DeviceInterfaceListLength,
+		(LPGUID)&GUID_DISPLAY_DEVICE_ARRIVAL,
+        NULL,
+        CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
+
+	if (cr != CR_SUCCESS) {
+		return 1;
+	}
+
+	if (DeviceInterfaceList != NULL) {
+		HeapFree(GetProcessHeap(), 0, DeviceInterfaceList);
+	}
+
+	DeviceInterfaceList = (PWSTR)HeapAlloc(GetProcessHeap(),
+		HEAP_ZERO_MEMORY,
+		DeviceInterfaceListLength * sizeof(WCHAR));
+
+	if (DeviceInterfaceList == NULL) {
+		//cr = CR_OUT_OF_MEMORY;
+		return 1;
+	}
+
+	cr = CM_Get_Device_Interface_List((LPGUID)&GUID_DISPLAY_DEVICE_ARRIVAL,
+		NULL,
+		DeviceInterfaceList,
+		DeviceInterfaceListLength,
+		CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
+
+	if (cr == CR_BUFFER_SMALL) {
+		return 1;
+	}
+
+	std::cout << DeviceInterfaceList;
+
+	return 0;
+}*/
+
+/*struct sysCPUTimes {
+	double userTime;
+	double systemTime;
+	uint64_t time;
+};
+
+sysCPUTimes cpuTimes1;
+
+int sys_cpu_init() {
+	FILETIME idleTime;
+	FILETIME kernelTime;
+	FILETIME userTime;
+
+	if (!GetSystemTimes(&idleTime, &kernelTime, &userTime)) {
+		return 0;
+	}
+
+	cpuTimes1.userTime = filetime_to_double(userTime);
+	cpuTimes1.systemTime = filetime_to_double(kernelTime);
+	cpuTimes1.time = getEpochTime();
+
+	return 1;
+}
+
+// This returns a value around 4% no matter how high or low the CPU usage actually is
+void sys_cpu() {
+	sysCPUTimes cpuTimes2;
+	FILETIME idleTime;
+	FILETIME kernelTime;
+	FILETIME userTime;
+
+	if (!GetSystemTimes(&idleTime, &kernelTime, &userTime)) {
+		return;
+	}
+
+	cpuTimes2.userTime = filetime_to_double(userTime);
+	cpuTimes2.systemTime = filetime_to_double(kernelTime);
+	cpuTimes2.time = getEpochTime();
+
+	double userTimeD = cpuTimes2.userTime - cpuTimes1.userTime;
+	double systemTimeD = cpuTimes2.systemTime - cpuTimes1.systemTime;
+
+	double cpuT = static_cast<double>(userTimeD + systemTimeD) / (cpuTimes2.time - cpuTimes1.time);
+	double cpu = ceil(cpuT * 100.0) / 100.0;
+
+	std::cout << "_framed_sys_cpu: ut1: " << cpuTimes1.userTime << "\n";
+	std::cout << "_framed_sys_cpu: ut2: " << cpuTimes2.userTime << "\n";
+	std::cout << "_framed_sys_cpu: tt1: " << cpuTimes1.time << "\n";
+	std::cout << "_framed_sys_cpu: st1: " << cpuTimes1.systemTime << "\n";
+	std::cout << "_framed_sys_cpu: st2: " << cpuTimes2.systemTime << "\n";
+	std::cout << "_framed_sys_cpu: tt2: " << cpuTimes2.time << "\n";
+	std::cout << "_framed_sys_cpu: utd: " << userTimeD << "\n";
+	std::cout << "_framed_sys_cpu: std: " << systemTimeD << "\n";
+
+	std::cout << "_framed_sys_cpu: add: " << (userTimeD + systemTimeD) << "\n";
+	std::cout << "_framed_sys_cpu: time: " << (cpuTimes2.time - cpuTimes1.time) << "\n";
+
+	std::cout << "__framed_sys_cpu: cpu: " << cpu << "\n";
+}*/
+
 BOOL IsElevated( ) {
     BOOL fRet = FALSE;
     HANDLE hToken = NULL;
@@ -537,20 +745,35 @@ int main( void ) {
 	psutil_net_io_counters();
 	sys_disk();
 
-	WTS_PROCESS_INFO* processes = NULL;
+	/*if (sys_cpu_init()) {
+		Sleep(100);
+		sys_cpu();
+	}*/
+
+	// Task manager updates CPU usage once per second. This program is designed
+	// to finish in less time than that. Due to this, task manager shows 0% CPU usage
+	// for Framed C++ API, when this is not the case. The system CPU usage graphs
+	// clearly show an increase in CPU usage when this program runs.
+	// In other words, je suis un idiot.
+	// Until I can find a solution to the high CPU usage, comment this out
+	/*WTS_PROCESS_INFO* processes = NULL;
 	DWORD count = 0;
 
 	if (WTSEnumerateProcesses(WTS_CURRENT_SERVER_HANDLE, NULL, 1, &processes, &count)) {
 		for (DWORD i = 0; i < count; i++) {
 			proc_memory_uss(processes[i].ProcessId);
 			proc_io(processes[i].ProcessId);
+			storeInitialCPUTimes(processes[i].ProcessId);
 		}
+
+		Sleep(100);
+		getAwaitedCPUTimes();
 	}
 
 	if (processes) {
 		WTSFreeMemory(processes);
 		processes = NULL;
-   }
+	}*/
 
    return 0;
 }
