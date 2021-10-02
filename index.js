@@ -1,10 +1,10 @@
-//const JSONRPCClient = require('json-rpc-2.0').JSONRPCClient;
 const axios = require('axios');
 const SockJS = require('sockjs-client');
+const events = require('events');
 const utils = require('./utils.js');
 const config = require('./config.json');
 
-var sock = new SockJS(`http://${config.host}:${config.port}/api`);
+var sock = null;
 
 const GET_PERFORMANCE_INTERVAL = 15 * 1000;
 var _authenticated = false;
@@ -15,6 +15,17 @@ var _servers = [];
 var _userContinent;
 var _ignoreNextDroppedFrames = false;
 var _streamDiagnosticsData = {};
+var _eventEmitter = new events.EventEmitter();
+
+const app = require('./app.js');
+
+if (app.isAlreadyOpen()) {
+	// Quit here, no need to connect to APIs
+	return app.getApp().quit();
+}
+
+app.init(_eventEmitter);
+utils.collectData.init(_eventEmitter);
 
 axios.get('https://ingest.twitch.tv/ingests').then(function(response) {
 	//console.log(response.data);
@@ -43,76 +54,124 @@ function initStreamDiagnosticsData() {
 			truewinter: {}
 		},
 		processes: {},
-		network: {}
+		system: {}
 	};
 }
 
 initStreamDiagnosticsData();
 
-sock.onopen = function() {
-	console.log('open');
+function connectToWS() {
+	if (sock !== null) return;
 
-	var _authRequest = utils.createJRPCMessage('auth', {
-		resource: 'TcpServerService',
-		args: [config.token]
-	});
+	sock = new SockJS(`http://${config.host}:${config.port}/api`);
 
-	_messageMap.set(_authRequest.id, 'auth');
-	send(_authRequest);
+	sock.onopen = function() {
+		console.log('open');
 
-	var _request = utils.createJRPCMessage('streamingStatusChange', {
-		resource: 'StreamingService',
-	});
+		var _authRequest = utils.createJRPCMessage('auth', {
+			resource: 'TcpServerService',
+			args: [config.token]
+		});
 
-	_messageMap.set(_request.id, 'stateevent');
-	send(_request);
+		_messageMap.set(_authRequest.id, 'auth');
+		send(_authRequest);
 
-	var _stateRequest = utils.createJRPCMessage('getModel', {
-		resource: 'StreamingService'
-	});
-	_messageMap.set(_stateRequest.id, 'state');
-	send(_stateRequest);
-};
+		var _request = utils.createJRPCMessage('streamingStatusChange', {
+			resource: 'StreamingService',
+		});
 
-sock.onmessage = function(e) {
-	var data = JSON.parse(e.data);
-	console.log(data);
-	if (data.id !== null && !_messageMap.has(data.id)) return;
+		_messageMap.set(_request.id, 'stateevent');
+		send(_request);
 
-	if (data.error) {
-		console.error(data.error);
-		sock.close();
-		return;
-	}
+		var _stateRequest = utils.createJRPCMessage('getModel', {
+			resource: 'StreamingService'
+		});
+		_messageMap.set(_stateRequest.id, 'state');
+		send(_stateRequest);
+	};
 
-	if (data.id === null) {
-		handleEvent(data.result);
-		return;
-	}
+	sock.onmessage = function(e) {
+		var data = JSON.parse(e.data);
+		//console.log(data);
+		if (data.id !== null && !_messageMap.has(data.id)) return;
 
-	switch (_messageMap.get(data.id)) {
-		case 'auth':
-			_authenticated = true;
-			console.log('Connected to Streamlabs OBS');
-			break;
-		case 'performance':
-			handlePerformanceData(data.result);
-			break;
-		case 'state':
-			if (data.result.streamingStatus === 'live' && _interval === null) {
-				console.log('App opened after streamer went live');
-				// Don't count dropped frames from before Framed was opened
-				_ignoreNextDroppedFrames = true;
-				getPerformance();
-				_interval = setInterval(function() {
+		if (data.error) {
+			console.error(data.error);
+			sock.close();
+			return;
+		}
+
+		if (data.id === null) {
+			handleEvent(data.result);
+			return;
+		}
+
+		switch (_messageMap.get(data.id)) {
+			case 'auth':
+				_authenticated = true;
+				console.log('Connected to Streamlabs OBS');
+				_eventEmitter.emit('connectedState', true);
+				break;
+			case 'performance':
+				handlePerformanceData(data.result);
+				break;
+			case 'state':
+				if (data.result.streamingStatus === 'live' && _interval === null) {
+					console.log('App opened after streamer went live');
+					// Don't count dropped frames from before Framed was opened
+					_ignoreNextDroppedFrames = true;
 					getPerformance();
-				}, GET_PERFORMANCE_INTERVAL);
-			}
-			break;
-	}
+					_interval = setInterval(function() {
+						getPerformance();
+					}, GET_PERFORMANCE_INTERVAL);
+				}
+				break;
+		}
 
-	_messageMap.delete(data.id);
-};
+		_messageMap.delete(data.id);
+	};
+
+	sock.onclose = function(e) {
+		console.log('close');
+		//console.log(e);
+		clearInterval(_interval);
+		_interval = null;
+		sock = null;
+		_authenticated = false;
+
+		_eventEmitter.emit('connectedState', false);
+
+		if (e.code === 1002 || e.code === 2000) {
+			_eventEmitter.emit('error', `Failed to connect to Streamlabs OBS. Error code: ${e.code} (${e.reason})`);
+		}
+	};
+
+	sock.onerror = function(err) {
+		console.log('error');
+		console.error(err);
+		sock.close();
+	};
+}
+
+_eventEmitter.on('isConnected', function() {
+	if (sock !== null && _authenticated) {
+		_eventEmitter.emit('connectedState', true);
+	} else {
+		_eventEmitter.emit('connectedState', false);
+	}
+});
+
+_eventEmitter.on('doConnect', function() {
+	connectToWS();
+});
+
+_eventEmitter.on('startCPPApi', () => {
+	utils.collectData.startTimer();
+});
+
+_eventEmitter.on('stopCPPApi', () => {
+	utils.collectData.stopTimer();
+});
 
 function handleEvent(data) {
 	if (data.emitter === 'STREAM') {
@@ -137,19 +196,8 @@ function handleEvent(data) {
 	}
 }
 
-sock.onclose = function() {
-	console.log('close');
-	clearInterval(_interval);
-	_interval = null;
-};
-
-sock.onerror = function(err) {
-	console.log('error');
-	console.error(err);
-	sock.close();
-};
-
 function send(json) {
+	if (!sock || !json) return;
 	sock.send(JSON.stringify(json));
 }
 
@@ -162,23 +210,65 @@ function getPerformance() {
 }
 
 function handlePerformanceData(data) {
-	console.log(data);
+	var timestamp = Date.now();
+	_eventEmitter.emit('frame', {
+		x: timestamp,
+		y: data.numberDroppedFrames
+	});
+
 	if (data.numberDroppedFrames > _droppedFramesLatest && !_ignoreNextDroppedFrames) {
-		var timestamp = Date.now();
 		_droppedFramesLatest = data.numberDroppedFrames;
 		_streamDiagnosticsData.frames[timestamp] = data.numberDroppedFrames;
 		runDiagnostics(timestamp);
 	}
 
 	if (_ignoreNextDroppedFrames) {
+		_droppedFramesLatest = data.numberDroppedFrames;
 		_ignoreNextDroppedFrames = false;
 	}
 }
 
+var _latestCPPData = null;
+
+_eventEmitter.on('cppData', (data) => {
+	_latestCPPData = data;
+});
+
+var _twitchPinged = 0;
+var _googlePinged = false;
+var _twPinged = false;
+
+_eventEmitter.on('diagnosticsPing', (ping, timestamp) => {
+	switch (ping) {
+		case 'twitch':
+			if (_twitchPinged !== 3) {
+				_twitchPinged++;
+			}
+			break;
+		case 'google':
+			_googlePinged = true;
+			break;
+		case 'truewinter':
+			_twPinged = true;
+			break;
+	}
+
+	if (_twitchPinged === 3 && _googlePinged && _twPinged) {
+		sendDiagnosticsToUI(timestamp);
+		_twitchPinged = 0;
+		_googlePinged = false;
+		_twPinged = false;
+	}
+});
+
 function runDiagnostics(timestamp) {
+	if (_latestCPPData !== null) {
+		_streamDiagnosticsData.system[timestamp] = _latestCPPData.system;
+	}
+
 	var _pingServers = utils.getRandomTwitchServers(_servers, _userContinent);
 	_streamDiagnosticsData.pings.twitch[timestamp] = [];
-	console.log(_pingServers);
+
 	for (var i = 0; i < _pingServers.length; i++) {
 		let _pingLocation = utils.parseCity(_pingServers[i].name);
 		console.log(`Pinging Twitch ingest server in ${_pingLocation}`);
@@ -192,6 +282,8 @@ function runDiagnostics(timestamp) {
 				name: _pingLocation,
 				average: Math.round(data.avg * 100) / 100
 			});
+
+			_eventEmitter.emit('diagnosticsPing', 'twitch', timestamp);
 		});
 	}
 
@@ -201,6 +293,7 @@ function runDiagnostics(timestamp) {
 		}
 
 		_streamDiagnosticsData.pings.google[timestamp] = Math.round(data.avg * 100) / 100;
+		_eventEmitter.emit('diagnosticsPing', 'google', timestamp);
 	});
 
 	utils.tcpPing('truewinter.dev', 443, function(err, data) {
@@ -209,20 +302,32 @@ function runDiagnostics(timestamp) {
 		}
 
 		_streamDiagnosticsData.pings.truewinter[timestamp] = Math.round(data.avg * 100) / 100;
+		_eventEmitter.emit('diagnosticsPing', 'truewinter', timestamp);
 	});
-
-	console.log(_streamDiagnosticsData);
 }
 
-// https://stackoverflow.com/a/3955096
-Array.prototype.remove = function() {
-	// eslint-disable-next-line prefer-rest-params
-	var what, a = arguments, L = a.length, ax;
-	while (L && this.length) {
-		what = a[--L];
-		while ((ax = this.indexOf(what)) !== -1) {
-			this.splice(ax, 1);
-		}
-	}
-	return this;
-};
+function sendDiagnosticsToUI(timestamp) {
+	var _emitData = {
+		timestamp,
+		frames: 0,
+		pings: {
+			twitch: [],
+			google: 0,
+			truewinter: 0
+		},
+		processes: {},
+		system: {},
+	};
+
+	_emitData.frames = _streamDiagnosticsData.frames[timestamp];
+	_emitData.pings.twitch = _streamDiagnosticsData.pings.twitch[timestamp];
+	_emitData.pings.google = _streamDiagnosticsData.pings.google[timestamp];
+	_emitData.pings.truewinter = _streamDiagnosticsData.pings.truewinter[timestamp];
+	_emitData.system = _streamDiagnosticsData.system[timestamp];
+
+	_eventEmitter.emit('diagnostics', _emitData);
+}
+
+process.on('uncaughtException', function (err) {
+	console.log(err);
+});

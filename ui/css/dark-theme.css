@@ -1,0 +1,127 @@
+body {
+	background-color: #24242c;
+	color: #f1ebeb;
+	margin: 0;
+}
+
+html, body {
+	height: 100%;
+}
+
+h1 {
+	margin: 0;
+	margin-bottom: 8px;
+	font-size: 1.7em;
+}
+
+.system-stats {
+	display: flex;
+    justify-content: space-around;
+}
+
+.pad {
+	width: 100%;
+    height: 8px;
+    display: block;
+}
+
+.main {
+	/* Margin to show scrollbar instead of hiding content behind footer */
+	margin-bottom: 50px;
+	padding: 5px;
+}
+
+.footer {
+	position: fixed;
+	bottom: 0;
+	padding: 10px;
+	border-top: 1px solid #aeaeae;
+	background-color: #24242c;
+}
+
+.system-stat {
+	display: flex;
+}
+
+.system-stat span {
+	margin-left: 8px;
+    flex-basis: 90px;
+    min-width: 90px;
+}
+
+.footer-control i {
+	margin-left: 12px;
+    font-size: 1.1em;
+	cursor: pointer;
+}
+
+.connected {
+	color: #37ad37;
+}
+
+.disconnected {
+	color: #f05353;
+}
+
+.alert {
+	background-color: #f05353;
+}
+
+#notices {
+	position: fixed;
+	right: 0;
+	bottom: 50px;
+	width: 30%;
+}
+
+.notice {
+	padding: 8px;
+	border-radius: 4px;
+	margin-bottom: 4px;
+}
+
+.info {
+	background-color: #5e5e5e;
+}
+
+.closeNotice {
+	float: right;
+    color: #caf196;
+    position: relative;
+    top: -10px;
+    right: -4px;
+	cursor: pointer;
+}
+
+#mainFooter {
+	display: flex;
+	justify-content: space-between;
+}
+
+.diagnostic {
+	padding: 16px;
+    background-color: #1a1a1f;
+    border-radius: 8px;
+    margin-top: 8px;
+    cursor: pointer;
+}
+
+/* width */
+::-webkit-scrollbar {
+	width: 5px;
+}
+
+/* Track */
+::-webkit-scrollbar-track {
+	background: #3a323e;
+}
+
+/* Handle */
+::-webkit-scrollbar-thumb {
+	background: #888;
+}
+
+/* Handle on hover */
+::-webkit-scrollbar-thumb:hover {
+	background: #555;
+}

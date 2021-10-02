@@ -44,6 +44,7 @@ function run() {
 		// Assuming a steady network and IO use, this should give
 		// the average over the time instead of showing a high value
 		missedRunsSinceLastSuccess++;
+		_eventEmitter.emit('longTimeRun');
 		return console.log('Previous run not yet finished');
 	}
 
@@ -77,6 +78,7 @@ function run() {
 		_processes: {},
 		apiCompleteTime: 0
 	};
+
 	var child = spawn('framed-cpp-api.exe');
 
 	var cmdOutput = '';

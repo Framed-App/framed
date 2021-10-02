@@ -1,0 +1,10 @@
+.system-stats {
+	display: flex;
+	justify-content: space-around;
+	flex-flow: row wrap;
+}
+
+.system-stat span, .frames span {
+    margin-left: 4px;
+    margin-right: 8px;
+}

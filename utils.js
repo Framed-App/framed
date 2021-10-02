@@ -17,7 +17,7 @@ function createJRPCMessage(method, params) {
 }
 
 function tcpPing(host, port, cb) {
-	tcpp.ping({ address: host, port: port, attempts: 3, timeout: 3 * 1000 }, function(err, data) {
+	tcpp.ping({ address: host, port: port, attempts: 3, timeout: 2 * 1000 }, function(err, data) {
 		if (err) {
 			return cb(err, null);
 		}
@@ -99,13 +99,12 @@ function getRandomTwitchServers(_servers, _userContinent) {
 	}
 
 	if (_userContinent) {
-		var _pingServers = getServersIn(_userContinent);
+		var _pingServers = getServersIn(_servers, _userContinent);
 
 		for (var i = 0; i < _returnCount; i++) {
 			var _p = _pingServers[Math.floor(Math.random() * _pingServers.length)];
 			if (_p) {
 				_returnArr.push(_p);
-				console.log('adding _pingServers');
 				_pingServers.remove(_p);
 			}
 		}
@@ -123,21 +122,14 @@ function getRandomTwitchServers(_servers, _userContinent) {
 				AN: 'SA'
 			};
 
-			var _altServers = getServersIn(_altLocations[_userContinent]);
-
-			console.log(_altServers.length);
-			console.log(_returnCount);
-			console.log(_returnArr.length);
-			console.log(_returnCount - _returnArr.length);
+			var _altServers = getServersIn(_servers, _altLocations[_userContinent]);
 
 			var _runTimes = _returnCount - _returnArr.length;
 
 			for (var j = 0; j < _runTimes; j++) {
 				var _a = _altServers[Math.floor(Math.random() * _altServers.length)];
-				console.log(':thinking:');
 				if (_a) {
 					_returnArr.push(_a);
-					console.log('adding _altServers');
 					_altServers.remove(_p);
 				}
 			}
@@ -152,7 +144,6 @@ function getRandomTwitchServers(_servers, _userContinent) {
 			var _s = _serversTmp[Math.floor(Math.random() * _serversTmp.length)];
 			if (_s) {
 				_returnArr.push(_s);
-				console.log('adding _serversTmp');
 				_serversTmp.remove(_s);
 			}
 		}
@@ -191,6 +182,19 @@ function getServersIn(_servers, continent) {
 
 	return _returnArr;
 }
+
+// https://stackoverflow.com/a/3955096
+Array.prototype.remove = function() {
+	// eslint-disable-next-line prefer-rest-params
+	var what, a = arguments, L = a.length, ax;
+	while (L && this.length) {
+		what = a[--L];
+		while ((ax = this.indexOf(what)) !== -1) {
+			this.splice(ax, 1);
+		}
+	}
+	return this;
+};
 
 module.exports.createJRPCMessage = createJRPCMessage;
 module.exports.tcpPing = tcpPing;
