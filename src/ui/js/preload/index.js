@@ -1,9 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const utils = require('../../utils.js');
+const utils = require('../../../utils.js');
 
 contextBridge.exposeInMainWorld('framed', {
 	onerror: (cb) => {
 		ipcRenderer.on('error', (_, data) => cb(data));
+	},
+	oninfo: (cb) => {
+		ipcRenderer.on('info', (_, data) => cb(data));
 	},
 	// There's probably a better way to do this, but all searches
 	// return either "use remote" or "use app.getVersion()"
@@ -35,5 +38,8 @@ contextBridge.exposeInMainWorld('framed', {
 	},
 	showDiagModal: (data) => {
 		ipcRenderer.send('showDiagModal', data);
+	},
+	openSettings: () => {
+		ipcRenderer.send('show-settings');
 	}
 });

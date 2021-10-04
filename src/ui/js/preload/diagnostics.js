@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const utils = require('../../utils.js');
+const utils = require('../../../utils.js');
 
 contextBridge.exposeInMainWorld('framed', {
 	receiveDiagnostics: (cb) => {

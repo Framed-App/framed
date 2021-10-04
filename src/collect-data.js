@@ -1,4 +1,5 @@
 const { spawn } = require('child_process');
+const path = require('path');
 const events = require('events');
 const os = require('os');
 
@@ -79,7 +80,7 @@ function run() {
 		apiCompleteTime: 0
 	};
 
-	var child = spawn('framed-cpp-api.exe');
+	var child = spawn(path.join(__dirname, 'framed-cpp-api.exe'));
 
 	var cmdOutput = '';
 

@@ -4,6 +4,18 @@ body {
 	margin: 0;
 }
 
+a, a:visited {
+	color: #0084ff;
+}
+
+a:hover {
+	color: #0099ff;
+}
+
+a:focus {
+	color: #00a2ff;
+}
+
 html, body {
 	height: 100%;
 }
@@ -17,6 +29,7 @@ h1 {
 .system-stats {
 	display: flex;
     justify-content: space-around;
+	flex-flow: row wrap;
 }
 
 .pad {
@@ -78,6 +91,7 @@ h1 {
 	padding: 8px;
 	border-radius: 4px;
 	margin-bottom: 4px;
+	word-break: break-word;
 }
 
 .info {
@@ -124,4 +138,12 @@ h1 {
 /* Handle on hover */
 ::-webkit-scrollbar-thumb:hover {
 	background: #555;
+}
+
+.diagnostic>span {
+    margin-left: 16px;
+}
+
+.diagnostic>span>span {
+    margin-left: 4px;
 }

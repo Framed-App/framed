@@ -2,6 +2,10 @@ window.framed.onerror((err) => {
 	addNotice('alert', err);
 });
 
+window.framed.oninfo((msg) => {
+	addNotice('info', msg);
+});
+
 window.framed.getVersion();
 window.framed.receiveVersion((version) => {
 	document.getElementById('version').innerText = version;
@@ -115,10 +119,15 @@ window.framed.receiveDiagnostics((data) => {
 	div.dataset.id = data.timestamp;
 	// eslint-disable-next-line no-undef
 	div.innerText = moment(data.timestamp).format('D MMM YYYY h:mm:ss A');
+	div.innerHTML += `<span title="Dropped Frames"><i class="fas fa-video"></i> <span class="diagnostic-frames">${data.frames}</span></span>`;
 
 	div.addEventListener('click', (e) => {
 		window.framed.showDiagModal(e.target.dataset.id);
 	});
 
 	_diagElem.appendChild(div);
+});
+
+document.getElementById('settingsBtn').addEventListener('click', () => {
+	window.framed.openSettings();
 });

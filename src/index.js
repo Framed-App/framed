@@ -27,6 +27,12 @@ if (app.isAlreadyOpen()) {
 app.init(_eventEmitter);
 utils.collectData.init(_eventEmitter);
 
+var _id = 0;
+function getID() {
+	_id++;
+	return _id;
+}
+
 axios.get('https://ingest.twitch.tv/ingests').then(function(response) {
 	//console.log(response.data);
 	_servers = response.data.ingests;
@@ -71,21 +77,21 @@ function connectToWS() {
 		var _authRequest = utils.createJRPCMessage('auth', {
 			resource: 'TcpServerService',
 			args: [config.token]
-		});
+		}, getID());
 
 		_messageMap.set(_authRequest.id, 'auth');
 		send(_authRequest);
 
 		var _request = utils.createJRPCMessage('streamingStatusChange', {
 			resource: 'StreamingService',
-		});
+		}, getID());
 
 		_messageMap.set(_request.id, 'stateevent');
 		send(_request);
 
 		var _stateRequest = utils.createJRPCMessage('getModel', {
 			resource: 'StreamingService'
-		});
+		}, getID());
 		_messageMap.set(_stateRequest.id, 'state');
 		send(_stateRequest);
 	};
@@ -204,7 +210,7 @@ function send(json) {
 function getPerformance() {
 	if (!_authenticated) return;
 
-	var _performanceRequest = utils.createJRPCMessage('getModel', { resource: 'PerformanceService' });
+	var _performanceRequest = utils.createJRPCMessage('getModel', { resource: 'PerformanceService' }, getID());
 	_messageMap.set(_performanceRequest.id, 'performance');
 	send(_performanceRequest);
 }
@@ -327,7 +333,3 @@ function sendDiagnosticsToUI(timestamp) {
 
 	_eventEmitter.emit('diagnostics', _emitData);
 }
-
-process.on('uncaughtException', function (err) {
-	console.log(err);
-});

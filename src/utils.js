@@ -1,16 +1,12 @@
 const tcpp = require('tcp-ping');
+const Ajv = require('ajv');
+const ajv = new Ajv({ allErrors: true });
 const collectData = require('./collect-data.js');
 
-var _id = 0;
-function getID() {
-	_id++;
-	return _id;
-}
-
-function createJRPCMessage(method, params) {
+function createJRPCMessage(method, params, id) {
 	return {
 		jsonrpc: '2.0',
-		id: getID(),
+		id,
 		method,
 		params
 	};
@@ -196,6 +192,96 @@ Array.prototype.remove = function() {
 	return this;
 };
 
+const schema = {
+	type: 'object',
+	additionalProperties: false,
+	patternProperties: {
+		'/[0-9]+$': {
+			type: 'object',
+			properties: {
+				timestamp: { type: 'number' },
+				frames: { type: 'number' },
+				pings: {
+					type: 'object',
+					properties: {
+						twitch: {
+							type: 'array',
+							items: {
+								type: 'object',
+								properties: {
+									name: { type: 'string' },
+									average: { type: 'number' },
+								},
+								required: ['name', 'average']
+							}
+						},
+						google: { type: 'number' },
+						truewinter: { type: 'number' }
+					},
+					required: ['twitch', 'google', 'truewinter']
+				},
+				processes: { type: 'object' }, // Not yet implemented
+				system: {
+					type: 'object',
+					properties: {
+						memory: {
+							type: 'object',
+							properties: {
+								memTotal: { type: 'number' },
+								memUsed: { type: 'number' }
+							},
+							required: ['memTotal', 'memUsed']
+						},
+						network: {
+							type: 'object',
+							properties: {
+								inBytes: { type: 'number' },
+								outBytes: { type: 'number' },
+								inErrors: { type: 'number' },
+								outErrors: { type: 'number' },
+								inDiscards: { type: 'number' },
+								outDiscards: { type: 'number' }
+							},
+							required: ['inBytes', 'outBytes', 'inErrors', 'outErrors', 'inDiscards', 'outDiscards']
+						},
+						disk: {
+							type: 'object',
+							properties: {
+								read: { type: 'number' },
+								write: { type: 'number' }
+							},
+							required: ['read', 'write']
+						},
+						cpu: {
+							type: 'object',
+							properties: {
+								percentage: { type: 'number' }
+							},
+							required: ['percentage']
+						}
+					},
+					required: ['memory', 'network', 'disk', 'cpu']
+				}
+			},
+			required: ['timestamp', 'frames', 'pings', 'processes', 'system']
+		}
+	}
+};
+
+function validateFileData(data) {
+	var validate = ajv.compile(schema);
+	var valid = validate(data);
+
+	if (valid) {
+		return { valid: true, message: 'Valid' };
+	} else {
+		return {
+			valid: false,
+			message: ajv.errorsText(validate.errors)
+		};
+	}
+}
+
 module.exports.createJRPCMessage = createJRPCMessage;
 module.exports.tcpPing = tcpPing;
 module.exports.convertBytes = convertBytes;
@@ -204,3 +290,4 @@ module.exports.collectData = collectData;
 module.exports.parseCity = parseCity;
 module.exports.parseHost = parseHost;
 module.exports.getRandomTwitchServers = getRandomTwitchServers;
+module.exports.validateFileData = validateFileData;
