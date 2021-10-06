@@ -46,12 +46,12 @@ axios.get('https://ingest.twitch.tv/ingests').then(function(response) {
 	console.error(error);
 });
 
-axios.get('https://framed-api.truewinter.dev/').then(function(response) {
+axios.get('https://cf-api.framed-app.com/get-location').then(function(response) {
 	console.log(response.data);
 	_userContinent = response.data.continent;
 	console.log('Saved user continent');
 }).catch(function(error) {
-	console.error('Unable to query Framed API');
+	console.error('Unable to query Framed API to get user location');
 	console.error(error);
 });
 
@@ -342,8 +342,7 @@ function runDiagnostics(timestamp) {
 		_eventEmitter.emit('diagnosticsPing', 'truewinter', timestamp);
 	});
 
-	// TODO: Change
-	utils.tcpPing('no.truewinter.dev', 443, function(err, data) {
+	utils.tcpPing('framed-app.com', 443, function(err, data) {
 		if (err) {
 			_streamDiagnosticsData.pings.framed[timestamp] = -1;
 			_eventEmitter.emit('diagnosticsPing', 'framed', timestamp);

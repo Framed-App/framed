@@ -131,3 +131,11 @@ window.framed.receiveDiagnostics((data) => {
 document.getElementById('settingsBtn').addEventListener('click', () => {
 	window.framed.openSettings();
 });
+
+document.getElementById('twitterBtn').addEventListener('click', () => {
+	window.framed.openTwitter();
+});
+
+document.getElementById('helpBtn').addEventListener('click', () => {
+	window.framed.openDocs();
+});

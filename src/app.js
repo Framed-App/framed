@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, nativeTheme, Menu, dialog, shell, ipcRenderer } = require('electron');
+const axios = require('axios').default;
 const path = require('path');
 const fs = require('fs');
 const moment = require('moment');
@@ -317,6 +318,14 @@ function start() {
 			createSettingsModal();
 		});
 
+		ipcMain.on('open-twitter', () => {
+			shell.openExternal('https://twitter.com/TheFramedApp');
+		});
+
+		ipcMain.on('open-docs', () => {
+			shell.openExternal(`https://framed-app.com/docs/v${app.getVersion()}`);
+		});
+
 		_eventEmitter.on('connectedState', (connected) => {
 			if (!win) return;
 			win.webContents.send('connected', connected);
@@ -371,12 +380,25 @@ function start() {
 
 		win.webContents.on('render-process-gone', (_, details) => {
 			console.log('gone');
-			console.log(_);
 			console.log(details);
 		});
 
 		win.webContents.on('did-finish-load', () => {
-			//win.webContents.openDevTools();
+			axios.get(`https://cf-api.framed-app.com/latest-version?version=v${app.getVersion()}`).then((response) => {
+				if (response.data.newer) {
+					switch (response.data.branch) {
+						case 'stable':
+							win.webContents.send('info', `Update available. Version ${response.data.message.replace(/^v/, '')} has been released.`);
+							break;
+						case 'beta':
+							win.webContents.send('info', `Beta update available. Version ${response.data.message.replace(/^v/, '')} has been released. Note: using beta versions is discouraged.`);
+							break;
+					}
+				}
+			}).catch((err) => {
+				console.error('Failed to query Framed API to check for updates');
+				console.error(err);
+			});
 		});
 	});
 

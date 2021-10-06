@@ -20,7 +20,7 @@
   "homepage": "https://github.com/TrueWinter/framed#readme",
   "dependencies": {
     "ajv": "^8.6.3",
-    "axios": "^0.21.4",
+    "axios": "^0.22.0",
     "electron-store": "^8.0.1",
     "is-ip": "^3.1.0",
     "moment": "^2.29.1",
@@ -28,6 +28,6 @@
     "tcp-ping": "^0.1.1"
   },
   "devDependencies": {
-    "electron": "^15.0.0"
+    "electron": "^15.1.1"
   }
 }

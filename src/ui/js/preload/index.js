@@ -41,5 +41,11 @@ contextBridge.exposeInMainWorld('framed', {
 	},
 	openSettings: () => {
 		ipcRenderer.send('show-settings');
+	},
+	openTwitter: () => {
+		ipcRenderer.send('open-twitter');
+	},
+	openDocs: () => {
+		ipcRenderer.send('open-docs');
 	}
 });
