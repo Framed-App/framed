@@ -1,8 +1,30 @@
-const { app, BrowserWindow, ipcMain, nativeTheme, Menu, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeTheme, Menu, dialog, shell, ipcRenderer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const moment = require('moment');
+const isIp = require('is-ip');
+const Store = require('electron-store');
 const utils = require('./utils.js');
+
+const store = new Store({
+	schema: {
+		token: {
+			type: 'string',
+			default: ''
+		},
+		port: {
+			type: 'number',
+			minimum: 1000,
+			maximum: 65535,
+			default: 59650
+		},
+		ip: {
+			type: 'string',
+			default: '127.0.0.1'
+		}
+	}
+});
+
 const gotTheLock = app.requestSingleInstanceLock();
 
 let win = null;
@@ -22,7 +44,8 @@ function start() {
 				preload: path.join(__dirname, 'ui', 'js', 'preload', 'index.js'),
 				contextIsolation: true
 			},
-			show: false
+			show: false,
+			icon: path.join(__dirname, 'img', 'icon.ico')
 		});
 
 		win.loadFile(path.join(__dirname, 'ui', 'index.html'));
@@ -91,7 +114,8 @@ function start() {
 				preload: path.join(__dirname, 'ui', 'js', 'preload', 'diagnostics.js'),
 				contextIsolation: true
 			},
-			show: false
+			show: false,
+			icon: path.join(__dirname, 'img', 'icon.ico')
 		});
 
 		_diagModals[timestamp].loadFile(path.join(__dirname, 'ui', 'diagnostics.html'));
@@ -117,14 +141,15 @@ function start() {
 
 		_aboutModal = new BrowserWindow({
 			width: 300,
-			height: 350,
+			height: 400,
 			parent: win,
 			modal: true,
 			show: false,
 			webPreferences: {
 				preload: path.join(__dirname, 'ui', 'js', 'preload', 'about.js'),
 				contextIsolation: true
-			}
+			},
+			icon: path.join(__dirname, 'img', 'icon.ico')
 		});
 
 		_aboutModal.loadFile(path.join(__dirname, 'ui', 'about.html'));
@@ -164,7 +189,8 @@ function start() {
 			webPreferences: {
 				preload: path.join(__dirname, 'ui', 'js', 'preload', 'settings.js'),
 				contextIsolation: true
-			}
+			},
+			icon: path.join(__dirname, 'img', 'icon.ico')
 		});
 
 		_settingsModal.loadFile(path.join(__dirname, 'ui', 'settings.html'));
@@ -253,11 +279,38 @@ function start() {
 		});
 
 		ipcMain.on('get-settings', () => {
+			if (!_settingsModal) return;
 
+			_settingsModal.webContents.send('settings', store.store);
 		});
 
 		ipcMain.on('save-settings', (_, data) => {
+			if (!_settingsModal) return;
+			_settingsModal.close();
 
+			if (!data.token || !data.ip || !data.port) {
+				return win.webContents.send('error', 'Failed to save settings. Required data missing.');
+			}
+
+			if (!isIp(data.ip)) {
+				return win.webContents.send('error', 'Failed to save settings. Invalid IP');
+			}
+
+			if (!data.port.match(/^[0-9]{1,5}$/)) {
+				return win.webContents.send('error', 'Failed to save settings. Invalid port');
+			}
+
+			store.set('token', data.token);
+			store.set('ip', data.ip);
+			store.set('port', parseInt(data.port));
+
+			win.webContents.send('info', 'Saved settings');
+
+			_eventEmitter.emit('doDisconnect');
+			_eventEmitter.emit('doSetConfig', data);
+			setTimeout(() => {
+				_eventEmitter.emit('doConnect');
+			}, 50);
 		});
 
 		ipcMain.on('show-settings', () => {
@@ -287,6 +340,7 @@ function start() {
 
 		win.once('ready-to-show', () => {
 			win.show();
+			_eventEmitter.emit('doSetConfig', store.store);
 			_eventEmitter.emit('doConnect');
 			_eventEmitter.emit('startCPPApi');
 		});

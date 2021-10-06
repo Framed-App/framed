@@ -12,7 +12,18 @@
 	<body>
 		<div class="main">
 			<h1>Settings</h1>
-			<script src="js/renderer/settings.js"></script>
+			<div>Token: <input id="tokenInput" size="40" required></div>
+			<div class="pad"></div>
+			<div>To get your token, open Streamlabs OBS and head to the settings. Then click on "Remote Control", reveal the QR code, and click "Show details".</div>
+			<div class="pad"></div>
+			<hr>
+			<h2>Advanced Settings</h2>
+			<div><span style="font-weight: bold">STOP!</span> Unless a Framed developer has instructed you to, please do not change any settings below.</div>
+			<div class="pad"></div>
+			<div>IP: <input id="ipInput" required></div>
+			<div>Port: <input id="portInput" required></div>
 		</div>
+		<div id="saveBtn">Save</div>
+		<script src="js/renderer/settings.js"></script>
 	</body>
 </html>

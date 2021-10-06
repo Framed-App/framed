@@ -11,6 +11,7 @@ window.framed.receiveDiagnostics((data) => {
 	document.getElementById('system-upload').innerText = `${window.framed.convertBits(data.system.network.outBytes * 8)}ps`;
 
 	createPingElem('Google', data.pings.google);
+	createPingElem('Framed', data.pings.framed);
 	createPingElem('TrueWinter', data.pings.truewinter);
 
 	for (var i = 0; i < data.pings.twitch.length; i++) {
@@ -23,7 +24,12 @@ function createPingElem(name, ping) {
 
 	var div = document.createElement('div');
 	div.className = 'ping';
-	div.innerText = `${name}: ${ping}ms`;
+
+	if (ping === -1) {
+		div.innerText = `${name}: unreachable`;
+	} else {
+		div.innerText = `${name}: ${ping}ms`;
+	}
 
 	_pingsElem.appendChild(div);
 }

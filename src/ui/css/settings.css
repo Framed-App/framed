@@ -1,0 +1,18 @@
+#saveBtn {
+	position: fixed;
+	bottom: 0;
+	right: 0;
+	padding: 8px;
+	border-radius: 4px;
+	background-color: #37ad37;
+	margin: 8px;
+	cursor: pointer;
+}
+
+input {
+	padding: 4px;
+	border-radius: 4px;
+	box-sizing: border-box;
+	border: 0;
+	margin-bottom: 8px;
+}

@@ -2,7 +2,6 @@ const axios = require('axios');
 const SockJS = require('sockjs-client');
 const events = require('events');
 const utils = require('./utils.js');
-const config = require('./config.json');
 
 var sock = null;
 
@@ -16,6 +15,11 @@ var _userContinent;
 var _ignoreNextDroppedFrames = false;
 var _streamDiagnosticsData = {};
 var _eventEmitter = new events.EventEmitter();
+var config = {
+	token: '',
+	ip: '127.0.0.1',
+	port: 59650
+};
 
 const app = require('./app.js');
 
@@ -57,7 +61,8 @@ function initStreamDiagnosticsData() {
 		pings: {
 			twitch: {},
 			google: {},
-			truewinter: {}
+			truewinter: {},
+			framed: {},
 		},
 		processes: {},
 		system: {}
@@ -68,8 +73,9 @@ initStreamDiagnosticsData();
 
 function connectToWS() {
 	if (sock !== null) return;
+	if (!config.token) return _eventEmitter.emit('error', 'Please open settings and set the token');
 
-	sock = new SockJS(`http://${config.host}:${config.port}/api`);
+	sock = new SockJS(`http://${config.ip}:${config.port}/api`);
 
 	sock.onopen = function() {
 		console.log('open');
@@ -103,6 +109,7 @@ function connectToWS() {
 
 		if (data.error) {
 			console.error(data.error);
+			_eventEmitter.emit('error', data.error.message);
 			sock.close();
 			return;
 		}
@@ -167,8 +174,17 @@ _eventEmitter.on('isConnected', function() {
 	}
 });
 
-_eventEmitter.on('doConnect', function() {
+_eventEmitter.on('doSetConfig', (_thisConfig) => {
+	config = _thisConfig;
+});
+
+_eventEmitter.on('doConnect', () => {
 	connectToWS();
+});
+
+_eventEmitter.on('doDisconnect', () => {
+	if (sock === null) return;
+	sock.close();
 });
 
 _eventEmitter.on('startCPPApi', () => {
@@ -243,6 +259,7 @@ _eventEmitter.on('cppData', (data) => {
 var _twitchPinged = 0;
 var _googlePinged = false;
 var _twPinged = false;
+var _framedPinged = false;
 
 _eventEmitter.on('diagnosticsPing', (ping, timestamp) => {
 	switch (ping) {
@@ -257,13 +274,17 @@ _eventEmitter.on('diagnosticsPing', (ping, timestamp) => {
 		case 'truewinter':
 			_twPinged = true;
 			break;
+		case 'framed':
+			_framedPinged = true;
+			break;
 	}
 
-	if (_twitchPinged === 3 && _googlePinged && _twPinged) {
+	if (_twitchPinged === 3 && _googlePinged && _twPinged && _framedPinged) {
 		sendDiagnosticsToUI(timestamp);
 		_twitchPinged = 0;
 		_googlePinged = false;
 		_twPinged = false;
+		_framedPinged = false;
 	}
 });
 
@@ -281,12 +302,18 @@ function runDiagnostics(timestamp) {
 
 		utils.tcpPing(utils.parseHost(_pingServers[i].url_template), 1935, function(err, data) {
 			if (err) {
+				_streamDiagnosticsData.pings.twitch[timestamp].push({
+					name: _pingLocation,
+					average: -1
+				});
+
+				_eventEmitter.emit('diagnosticsPing', 'twitch', timestamp);
 				return console.error(err);
 			}
 
 			_streamDiagnosticsData.pings.twitch[timestamp].push({
 				name: _pingLocation,
-				average: Math.round(data.avg * 100) / 100
+				average: data.avg ? Math.round(data.avg * 100) / 100 : -1
 			});
 
 			_eventEmitter.emit('diagnosticsPing', 'twitch', timestamp);
@@ -295,20 +322,36 @@ function runDiagnostics(timestamp) {
 
 	utils.tcpPing('google.com', 443, function(err, data) {
 		if (err) {
+			_streamDiagnosticsData.pings.google[timestamp] = -1;
+			_eventEmitter.emit('diagnosticsPing', 'google', timestamp);
 			return console.error(err);
 		}
 
-		_streamDiagnosticsData.pings.google[timestamp] = Math.round(data.avg * 100) / 100;
+		_streamDiagnosticsData.pings.google[timestamp] = data.avg ? Math.round(data.avg * 100) / 100 : -1;
 		_eventEmitter.emit('diagnosticsPing', 'google', timestamp);
 	});
 
 	utils.tcpPing('truewinter.dev', 443, function(err, data) {
 		if (err) {
+			_streamDiagnosticsData.pings.truewinter[timestamp] = -1;
+			_eventEmitter.emit('diagnosticsPing', 'truewinter', timestamp);
 			return console.error(err);
 		}
 
-		_streamDiagnosticsData.pings.truewinter[timestamp] = Math.round(data.avg * 100) / 100;
+		_streamDiagnosticsData.pings.truewinter[timestamp] = data.avg ? Math.round(data.avg * 100) / 100 : -1;
 		_eventEmitter.emit('diagnosticsPing', 'truewinter', timestamp);
+	});
+
+	// TODO: Change
+	utils.tcpPing('no.truewinter.dev', 443, function(err, data) {
+		if (err) {
+			_streamDiagnosticsData.pings.framed[timestamp] = -1;
+			_eventEmitter.emit('diagnosticsPing', 'framed', timestamp);
+			return console.error(err);
+		}
+
+		_streamDiagnosticsData.pings.framed[timestamp] = data.avg ? Math.round(data.avg * 100) / 100 : -1;
+		_eventEmitter.emit('diagnosticsPing', 'framed', timestamp);
 	});
 }
 
@@ -319,7 +362,8 @@ function sendDiagnosticsToUI(timestamp) {
 		pings: {
 			twitch: [],
 			google: 0,
-			truewinter: 0
+			truewinter: 0,
+			framed: 0
 		},
 		processes: {},
 		system: {},
@@ -329,6 +373,7 @@ function sendDiagnosticsToUI(timestamp) {
 	_emitData.pings.twitch = _streamDiagnosticsData.pings.twitch[timestamp];
 	_emitData.pings.google = _streamDiagnosticsData.pings.google[timestamp];
 	_emitData.pings.truewinter = _streamDiagnosticsData.pings.truewinter[timestamp];
+	_emitData.pings.framed = _streamDiagnosticsData.pings.framed[timestamp];
 	_emitData.system = _streamDiagnosticsData.system[timestamp];
 
 	_eventEmitter.emit('diagnostics', _emitData);

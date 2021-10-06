@@ -216,9 +216,10 @@ const schema = {
 							}
 						},
 						google: { type: 'number' },
-						truewinter: { type: 'number' }
+						truewinter: { type: 'number' },
+						framed: { type: 'number' }
 					},
-					required: ['twitch', 'google', 'truewinter']
+					required: ['twitch', 'google', 'truewinter', 'framed']
 				},
 				processes: { type: 'object' }, // Not yet implemented
 				system: {

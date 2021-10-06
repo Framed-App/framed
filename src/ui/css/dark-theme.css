@@ -16,10 +16,6 @@ a:focus {
 	color: #00a2ff;
 }
 
-html, body {
-	height: 100%;
-}
-
 h1 {
 	margin: 0;
 	margin-bottom: 8px;

@@ -1,3 +1,11 @@
 .main {
 	margin-bottom: 0;
 }
+
+.logo-full {
+	max-width: 100%;
+}
+
+.center {
+	text-align: center;
+}
