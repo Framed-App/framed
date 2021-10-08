@@ -8,6 +8,8 @@ var missedRunsSinceLastSuccess = 0;
 
 var _timer = null;
 var _eventEmitter = null;
+var _path = null;
+var _isProd = null;
 var _internalEventEmitter = new events.EventEmitter();
 
 // First run for counters should return 0
@@ -80,7 +82,8 @@ function run() {
 		apiCompleteTime: 0
 	};
 
-	var child = spawn(path.join(__dirname, 'framed-cpp-api.exe'));
+	var _cppPath = _isProd ? path.join(path.parse(_path).dir, 'resources') : __dirname;
+	var child = spawn(path.join(_cppPath, 'framed-cpp-api.exe'));
 
 	var cmdOutput = '';
 
@@ -341,8 +344,10 @@ function handleInternalEventCall() {
 	}
 }
 
-function init(eventEmitter) {
+function init(eventEmitter, exePath, isProd) {
 	_eventEmitter = eventEmitter;
+	_path = exePath;
+	_isProd = isProd;
 }
 
 function startTimer() {
@@ -363,7 +368,7 @@ function stopTimer() {
 
 function _test() {
 	var eventEmitter = new events.EventEmitter();
-	init(eventEmitter);
+	init(eventEmitter, __dirname);
 	startTimer();
 
 	_eventEmitter.on('cppData', function(data) {

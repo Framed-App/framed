@@ -5,7 +5,6 @@ const fs = require('fs');
 const moment = require('moment');
 const isIp = require('is-ip');
 const Store = require('electron-store');
-const utils = require('./utils.js');
 
 const store = new Store({
 	schema: {

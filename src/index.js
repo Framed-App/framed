@@ -2,6 +2,7 @@ const axios = require('axios');
 const SockJS = require('sockjs-client');
 const events = require('events');
 const utils = require('./utils.js');
+const electronUtil = require('electron-util/node');
 
 var sock = null;
 
@@ -29,7 +30,7 @@ if (app.isAlreadyOpen()) {
 }
 
 app.init(_eventEmitter);
-utils.collectData.init(_eventEmitter);
+utils.collectData.init(_eventEmitter, app.getApp().getPath('exe'), electronUtil.isUsingAsar);
 
 var _id = 0;
 function getID() {
