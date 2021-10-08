@@ -87,9 +87,9 @@ function start() {
 						}
 					},
 					{
-						label: 'FAQ',
+						label: 'Help',
 						click: async () => {
-							await shell.openExternal('https://electronjs.org');
+							await shell.openExternal(`https://framed-app.com/docs/v${app.getVersion()}`);
 						}
 					}
 				]

@@ -1,33 +1,47 @@
 {
-  "name": "framed",
-  "productName": "Framed",
-  "version": "0.0.1",
-  "description": "Framed allows you to find the cause of dropped frames while streaming",
-  "main": "src/index.js",
-  "scripts": {
-    "start": "electron .",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/TrueWinter/framed.git"
-  },
-  "author": "TrueWinter",
-  "license": "GPL-3.0",
-  "bugs": {
-    "url": "https://github.com/TrueWinter/framed/issues"
-  },
-  "homepage": "https://github.com/TrueWinter/framed#readme",
-  "dependencies": {
-    "ajv": "^8.6.3",
-    "axios": "^0.22.0",
-    "electron-store": "^8.0.1",
-    "is-ip": "^3.1.0",
-    "moment": "^2.29.1",
-    "sockjs-client": "^1.5.2",
-    "tcp-ping": "^0.1.1"
-  },
-  "devDependencies": {
-    "electron": "^15.1.1"
-  }
+	"name": "framed",
+	"productName": "Framed",
+	"version": "0.0.1",
+	"description": "Framed allows you to find the cause of dropped frames while streaming",
+	"main": "src/index.js",
+	"scripts": {
+		"start": "electron .",
+		"pack": "electron-builder --dir",
+		"build": "electron-builder",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/TrueWinter/framed.git"
+	},
+	"author": "TrueWinter",
+	"license": "GPL-3.0",
+	"bugs": {
+		"url": "https://github.com/TrueWinter/framed/issues"
+	},
+	"homepage": "https://framed-app.com",
+	"dependencies": {
+		"ajv": "^8.6.3",
+		"axios": "^0.22.0",
+		"electron-store": "^8.0.1",
+		"is-ip": "^3.1.0",
+		"moment": "^2.29.1",
+		"sockjs-client": "^1.5.2",
+		"tcp-ping": "^0.1.1"
+	},
+	"devDependencies": {
+		"electron": "^15.1.1",
+		"electron-builder": "^22.11.7"
+	},
+	"build": {
+		"appId": "dev.truewinter.framed",
+		"productName": "Framed",
+		"win": {
+			"icon": "src/img/icon.ico"
+		},
+		"nsis": {
+			"oneClick": false,
+			"license": "LICENSE.md"
+		}
+	}
 }
