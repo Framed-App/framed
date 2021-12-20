@@ -1,7 +1,7 @@
 const tcpp = require('tcp-ping');
-const Ajv = require('ajv');
-const ajv = new Ajv({ allErrors: true });
-const collectData = require('./collect-data.js');
+const fs = require('fs');
+const path = require('path');
+//const collectData = require('./collect-data.js');
 
 function createJRPCMessage(method, params, id) {
 	return {
@@ -106,7 +106,9 @@ function getRandomTwitchServers(_servers, _userContinent) {
 		}
 
 		if (_pingServers.length < 3) {
-			console.log('User continent contains less than 3 servers');
+			process.emitWarning('User continent contains less than 3 servers', {
+				code: 'FRAMED_TWITCH_SERVERS_CONTINENT_LOW_COUNT'
+			});
 
 			var _altLocations = {
 				AF: 'EU',
@@ -131,7 +133,9 @@ function getRandomTwitchServers(_servers, _userContinent) {
 			}
 		}
 	} else {
-		console.log('User continent blank');
+		process.emitWarning('User continent blank', {
+			code: 'FRAMED_CONTINENT_BLANK'
+		});
 
 		// Create copy
 		var _serversTmp = _servers.slice();
@@ -168,7 +172,7 @@ function getServersIn(_servers, continent) {
 		var _convertedLocation = _twitchLocations[_location];
 
 		// Ensures that this won't break by Twitch expanding into new locations
-		// PS: Twitch, consider add South African servers
+		// PS: Twitch, consider adding South African servers
 		if (_convertedLocation) {
 			if (_convertedLocation === continent) {
 				_returnArr.push(s);
@@ -192,102 +196,51 @@ Array.prototype.remove = function() {
 	return this;
 };
 
-const schema = {
-	type: 'object',
-	additionalProperties: false,
-	patternProperties: {
-		'/[0-9]+$': {
-			type: 'object',
-			properties: {
-				timestamp: { type: 'number' },
-				frames: { type: 'number' },
-				pings: {
-					type: 'object',
-					properties: {
-						twitch: {
-							type: 'array',
-							items: {
-								type: 'object',
-								properties: {
-									name: { type: 'string' },
-									average: { type: 'number' },
-								},
-								required: ['name', 'average']
-							}
-						},
-						google: { type: 'number' },
-						truewinter: { type: 'number' },
-						framed: { type: 'number' }
-					},
-					required: ['twitch', 'google', 'truewinter', 'framed']
-				},
-				processes: { type: 'object' }, // Not yet implemented
-				system: {
-					type: 'object',
-					properties: {
-						memory: {
-							type: 'object',
-							properties: {
-								memTotal: { type: 'number' },
-								memUsed: { type: 'number' }
-							},
-							required: ['memTotal', 'memUsed']
-						},
-						network: {
-							type: 'object',
-							properties: {
-								inBytes: { type: 'number' },
-								outBytes: { type: 'number' },
-								inErrors: { type: 'number' },
-								outErrors: { type: 'number' },
-								inDiscards: { type: 'number' },
-								outDiscards: { type: 'number' }
-							},
-							required: ['inBytes', 'outBytes', 'inErrors', 'outErrors', 'inDiscards', 'outDiscards']
-						},
-						disk: {
-							type: 'object',
-							properties: {
-								read: { type: 'number' },
-								write: { type: 'number' }
-							},
-							required: ['read', 'write']
-						},
-						cpu: {
-							type: 'object',
-							properties: {
-								percentage: { type: 'number' }
-							},
-							required: ['percentage']
-						}
-					},
-					required: ['memory', 'network', 'disk', 'cpu']
-				}
-			},
-			required: ['timestamp', 'frames', 'pings', 'processes', 'system']
-		}
-	}
-};
-
+// TODO: Test
+// Validate the data file for the version specified, or the closest previous version
+// This allows for there to be one file for all consecutive versions that share the same format
 function validateFileData(data) {
-	var validate = ajv.compile(schema);
-	var valid = validate(data);
+	var version = data.version;
+	var _v = fs.readdirSync(path.join(__dirname, 'frd-validator'));
+	var versions = [];
 
-	if (valid) {
-		return { valid: true, message: 'Valid' };
-	} else {
-		return {
-			valid: false,
-			message: ajv.errorsText(validate.errors)
-		};
+	for (var i = 0; i < _v.length; i++) {
+		versions.push(_v[i].replace(/\.js$/, ''));
 	}
+
+	//console.log(versions);
+
+	if (!version) {
+		version = '0.0.1';
+		data = { data };
+	}
+
+	versions.sort();
+
+	var closestVersion = '';
+	for (var j = 0; j < versions.length; j++) {
+		var _thisVersion = versions[j].replace(/^v/, '');
+		if (_thisVersion > version) {
+			continue;
+		}
+
+		closestVersion = _thisVersion;
+	}
+
+	//console.log(closestVersion);
+
+	if (!closestVersion) {
+		throw new Error('Unable to find closest version');
+	}
+
+	return require(`./frd-validator/v${version}.js`).validate(data.data);
 }
 
 module.exports.createJRPCMessage = createJRPCMessage;
 module.exports.tcpPing = tcpPing;
 module.exports.convertBytes = convertBytes;
 module.exports.convertBits = convertBits;
-module.exports.collectData = collectData;
+//module.exports.collectData = collectData;
 module.exports.parseCity = parseCity;
 module.exports.parseHost = parseHost;
 module.exports.getRandomTwitchServers = getRandomTwitchServers;

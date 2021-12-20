@@ -36,6 +36,12 @@ contextBridge.exposeInMainWorld('framed', {
 	receiveFrame: (cb) => {
 		ipcRenderer.on('frame', (_, data) => cb(data));
 	},
+	receiveClearDiagData: (cb) => {
+		ipcRenderer.on('clearDiagData', () => cb());
+	},
+	receiveClearFrameData: (cb) => {
+		ipcRenderer.on('clearFrameData', () => cb());
+	},
 	showDiagModal: (data) => {
 		ipcRenderer.send('showDiagModal', data);
 	},

@@ -1,16 +1,18 @@
-const { spawn } = require('child_process');
 const path = require('path');
-const events = require('events');
-const os = require('os');
+
+const { fork } = require('child_process');
+const collectNativeDataProcess = fork(path.join(__dirname, 'collect-native-data.js'), ['child']);
+
+collectNativeDataProcess.on('error', (err) => {
+	console.error(err);
+});
 
 var prevFinished = true;
 var missedRunsSinceLastSuccess = 0;
 
 var _timer = null;
 var _eventEmitter = null;
-var _path = null;
-var _isProd = null;
-var _internalEventEmitter = new events.EventEmitter();
+var _log = null;
 
 // First run for counters should return 0
 // and save the counter value. Do not emit
@@ -42,13 +44,16 @@ function run() {
 
 		return console.error('Pass an EventEmitter to the init() function to initialize');
 	}
+
 	if (!prevFinished) {
 		// Divide the network and IO values by this value + 1
 		// Assuming a steady network and IO use, this should give
 		// the average over the time instead of showing a high value
 		missedRunsSinceLastSuccess++;
+
+		// For future feature
 		_eventEmitter.emit('longTimeRun');
-		return console.log('Previous run not yet finished');
+		return _log.info('Previous run not yet finished');
 	}
 
 	prevFinished = false;
@@ -82,27 +87,35 @@ function run() {
 		apiCompleteTime: 0
 	};
 
-	var _cppPath = _isProd ? path.join(path.parse(_path).dir, 'resources') : __dirname;
-	var child = spawn(path.join(_cppPath, 'framed-cpp-api.exe'));
+	//var _cppPath = _isProd ? path.join(path.parse(_path).dir, 'resources') : __dirname;
+	//var child = spawn(path.join(_cppPath, 'framed-cpp-api.exe'));
 
-	var cmdOutput = '';
+	var cmdOutput;
 
-	child.stderr.on('data', function(stderr) {
-		if (stderr) {
-			_internalEventEmitter.emit('error', stderr);
-			return console.error(stderr.toString());
-		}
-	});
+	collectNativeDataProcess.send('getPerfData');
 
-	child.stdout.on('data', function(stdout) {
-		cmdOutput += stdout.toString();
-	});
+	collectNativeDataProcess.once('message', function(m) {
+		if (m.message !== 'perfData') return;
 
-	child.on('close', function (code) {
-		if (code !== 0) {
-			_internalEventEmitter.emit('error', `child process exited with code ${code}`);
-			return;
-		}
+		var data = m.data;
+		cmdOutput = data;
+
+		/*child.stderr.on('data', function(stderr) {
+			if (stderr) {
+				_internalEventEmitter.emit('error', stderr);
+				return console.error(stderr.toString());
+			}
+		});
+
+		child.stdout.on('data', function(stdout) {
+			cmdOutput += stdout.toString();
+		});*/
+
+		/*child.on('close', function (code) {
+			if (code !== 0) {
+				_internalEventEmitter.emit('error', `child process exited with code ${code}`);
+				return;
+			}*/
 		var t2 = Date.now();
 		jsonOutput.apiCompleteTime = t2 - t1;
 		//console.log(cmdOutput);
@@ -121,12 +134,14 @@ function run() {
 		// __framed_sys_disk-c contains:
 		//   + read*
 		//   + write*
+		// __framed_sys_cpu contains:
+		//   + cpu
 		// All others contain:
 		//   + mem
 		//   + ioRead*
 		//   + ioWrite*
 
-		var cmdOutputLines = cmdOutput.split('\r\n');
+		var cmdOutputLines = cmdOutput.split('\n');
 
 		for (var i = 0; i < cmdOutputLines.length; i++) {
 			if (cmdOutputLines[i] === '') continue;
@@ -134,7 +149,9 @@ function run() {
 			if (!line) {
 				continue;
 			}
-			if (line.name.startsWith('__framed_sys_mem')) {
+			if (line.name.startsWith('__framed_sys_cpu')) {
+				jsonOutput.system.cpu.percentage = line.value / 100;
+			} else if (line.name.startsWith('__framed_sys_mem')) {
 				if (Object.prototype.hasOwnProperty.call(jsonOutput.system.memory, line.key)) {
 					jsonOutput.system.memory[line.key] = line.value;
 
@@ -232,14 +249,17 @@ function run() {
 		prevFinished = true;
 
 		if (!firstRun) {
-			_internalEventEmitter.emit('cppData', jsonOutput);
+			_eventEmitter.emit('cppData', jsonOutput);
 		}
 
+		//console.log(jsonOutput);
+
 		firstRun = false;
+		//});
 	});
 }
 
-function calculateCPUUsage(cb) {
+/*function calculateCPUUsage(cb) {
 	// Most accurate (compared to task manager) values at
 	// 1000ms it seems. With an EventHandler, this should finish
 	// just in time.
@@ -278,7 +298,7 @@ function calculateCPUUsage(cb) {
 
 		cb(Math.round(cpuPercent * 100) / 100);
 	}, _interval);
-}
+}*/
 
 function parseLine(line) {
 	var _output = {};
@@ -287,13 +307,16 @@ function parseLine(line) {
 
 	if (lineArr.length !== 3) {
 		console.log(line);
-		console.error('The parseLine() function currently only supports lines separated into 3 parts using a colon');
+		console.log(lineArr);
+		_log.error('The parseLine() function currently only supports lines separated into 3 parts using a colon');
 		return null;
 	}
 
 	_output.name = removeWhitespace(lineArr[0]);
 	_output.key = removeWhitespace(lineArr[1]);
 	_output.value = parseInt(removeWhitespace(lineArr[2]));
+
+	//console.log(_output);
 
 	return _output;
 }
@@ -302,17 +325,17 @@ function removeWhitespace(string) {
 	return string.replace(/^\W/g, '').replace(/\W$/g, '');
 }
 
-var _cpuData = 0;
-var _cppData = null;
+//var _cpuData = 0;
+//var _cppData = null;
 
 // This was initially done with a counter,
 // but I needed to ensure that one event type
 // firing twice doesn't fire the main event
 // handler event.
-var _cpuDataEventFired = false;
-var _cppDataEventFired = false;
+//var _cpuDataEventFired = false;
+//var _cppDataEventFired = false;
 
-_internalEventEmitter.on('cpuData', function(data) {
+/*_internalEventEmitter.on('cpuData', function(data) {
 	_cpuData = data;
 	_cpuDataEventFired = true;
 	handleInternalEventCall();
@@ -327,36 +350,42 @@ _internalEventEmitter.on('cppData', function(data) {
 _internalEventEmitter.on('error', function(err) {
 	console.error(err);
 	resetInternalEventData();
-});
+});*/
 
-function resetInternalEventData() {
-	_cpuData = 0;
+/*function resetInternalEventData() {
+	//_cpuData = 0;
 	_cppData = null;
 	_cppDataEventFired = false;
-	_cpuDataEventFired = false;
-}
+	//_cpuDataEventFired = false;
+}*/
 
-function handleInternalEventCall() {
+/*function handleInternalEventCall() {
 	if (_cppDataEventFired && _cpuDataEventFired) {
 		_cppData.system.cpu.percentage = _cpuData;
 		_eventEmitter.emit('cppData', _cppData);
 		resetInternalEventData();
 	}
-}
+}*/
 
-function init(eventEmitter, exePath, isProd) {
+function init(eventEmitter, log) {
 	_eventEmitter = eventEmitter;
-	_path = exePath;
-	_isProd = isProd;
+	_log = log;
+
+	log.info(`Started native API child process with PID ${collectNativeDataProcess.pid}`);
+
+	_eventEmitter.on('killNativeAPIChildProcess', () => {
+		collectNativeDataProcess.kill();
+	});
 }
 
 function startTimer() {
+	if (_timer !== null) return;
 	_timer = setInterval(function() {
 		// Couldn't get the C++ system CPU code working,
 		// so for now, it'll be calculated in Node.js
-		calculateCPUUsage(function (cpu) {
+		/*calculateCPUUsage(function (cpu) {
 			_internalEventEmitter.emit('cpuData', cpu);
-		});
+		});*/
 		run();
 	}, 1000);
 }
@@ -366,7 +395,7 @@ function stopTimer() {
 	_timer = null;
 }
 
-function _test() {
+/*function _test() {
 	var eventEmitter = new events.EventEmitter();
 	init(eventEmitter, __dirname);
 	startTimer();
@@ -374,9 +403,9 @@ function _test() {
 	_eventEmitter.on('cppData', function(data) {
 		console.log(data);
 	});
-}
+}*/
 
 module.exports.init = init;
 module.exports.startTimer = startTimer;
 module.exports.stopTimer = stopTimer;
-module.exports._test = _test;
+//module.exports._test = _test;

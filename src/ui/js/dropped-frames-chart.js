@@ -12,6 +12,9 @@ var chartConfig = {
 		scales: {
 			x: {
 				type: 'time'
+			},
+			y: {
+				min: 0
 			}
 		},
 		animation: false
@@ -43,5 +46,10 @@ function generateRandomDataset(length) {
 
 window.framed.receiveFrame((data) => {
 	chartConfig.data.datasets[0].data.push(data);
+	chart.update();
+});
+
+window.framed.receiveClearFrameData(() => {
+	chartConfig.data.datasets[0].data = [];
 	chart.update();
 });

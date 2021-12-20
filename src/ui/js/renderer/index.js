@@ -128,6 +128,14 @@ window.framed.receiveDiagnostics((data) => {
 	_diagElem.appendChild(div);
 });
 
+window.framed.receiveClearDiagData(() => {
+	var _diagElem = document.getElementById('diagnostics').children;
+
+	while (_diagElem[0]) {
+		_diagElem[0].parentNode.removeChild(_diagElem[0]);
+	}
+});
+
 document.getElementById('settingsBtn').addEventListener('click', () => {
 	window.framed.openSettings();
 });

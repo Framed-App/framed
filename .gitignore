@@ -3,4 +3,9 @@ config.json
 test*
 .vscode
 dist
+src/native-api/build/
+
+# Legacy native code
+src/framed-api.cpp
+src/build-framed-cpp.bat
 src/framed-cpp-api.exe

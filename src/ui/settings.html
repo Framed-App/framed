@@ -12,16 +12,34 @@
 	<body>
 		<div class="main">
 			<h1>Settings</h1>
-			<div>Token: <input id="tokenInput" size="40" required></div>
-			<div class="pad"></div>
-			<div>To get your token, open Streamlabs OBS and head to the settings. Then click on "Remote Control", reveal the QR code, and click "Show details".</div>
-			<div class="pad"></div>
+			<div id="streamingSoftwareSetting">
+				<span>
+					<input type="radio" id="streamingSoftwareStreamlabs" name="streamingSoftware" value="streamlabs" required>
+					<label for="streamingSoftwareStreamlabs">Streamlabs</label>
+				</span>
+				<span>
+					<input type="radio" id="streamingSoftwareOBS" name="streamingSoftware" value="obs" required>
+					<label for="streamingSoftwareOBS">OBS</label>
+				</span>
+			</div>
+			<div id="streamlabsSettings">
+				<div>To get your token, open Streamlabs OBS and head to the settings. Then click on "Remote Control", reveal the QR code, and click "Show details".</div>
+				<div>Token: <input id="tokenInputSL" size="40" required></div>
+				<div>Port: <input id="portInputSL" required></div>
+			</div>
+			<div id="obsSettings">
+				<div>You will need to install <a href="https://github.com/obsproject/obs-websocket/releases/tag/4.9.1">obs-websocket v4.9.1</a>. Set a password by opening OBS and clicking on "WebSockets Server Settings" under the "Tools" menu. Enter the same password here.</div>
+				<div>Password: <input id="tokenInputOBS" size="40" required></div>
+				<div>Port: <input id="portInputOBS" required></div>
+			</div>
 			<hr>
 			<h2>Advanced Settings</h2>
-			<div><span style="font-weight: bold">STOP!</span> Unless a Framed developer has instructed you to, please do not change any settings below.</div>
+			<div>Unless a Framed developer has instructed you to, please do not change any settings below.</div>
 			<div class="pad"></div>
-			<div>IP: <input id="ipInput" required></div>
-			<div>Port: <input id="portInput" required></div>
+			<div>Disable Hardware Acceleration: <input type="checkbox" id="disableHardwareAcceleration"></div>
+			<div>You will need to restart Framed for changes to hardware acceleration to take effect.</div>
+			<div class="pad"></div>
+			<div>Websocket IP: <input id="ipInput" required></div>
 		</div>
 		<div id="saveBtn">Save</div>
 		<script src="js/renderer/settings.js"></script>

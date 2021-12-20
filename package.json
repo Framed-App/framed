@@ -1,7 +1,7 @@
 {
 	"name": "framed",
 	"productName": "Framed",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"description": "Framed allows you to find the cause of dropped frames while streaming",
 	"main": "src/index.js",
 	"scripts": {
@@ -23,15 +23,17 @@
 	"dependencies": {
 		"ajv": "^8.6.3",
 		"axios": "^0.22.0",
+		"electron-log": "^4.4.1",
 		"electron-store": "^8.0.1",
 		"electron-util": "^0.17.2",
 		"is-ip": "^3.1.0",
 		"moment": "^2.29.1",
+		"obs-websocket-js": "^4.0.3",
 		"sockjs-client": "^1.5.2",
 		"tcp-ping": "^0.1.1"
 	},
 	"devDependencies": {
-		"electron": "^15.1.1",
+		"electron": "^16.0.3",
 		"electron-builder": "^22.11.7"
 	},
 	"build": {
@@ -43,10 +45,6 @@
 		"nsis": {
 			"oneClick": false,
 			"license": "LICENSE.md"
-		},
-		"extraResources": [{
-			"from": "src/framed-cpp-api.exe",
-			"to": "framed-cpp-api.exe"
-		}]
+		}
 	}
 }

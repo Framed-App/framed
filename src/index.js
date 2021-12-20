@@ -1,22 +1,21 @@
 const axios = require('axios');
-const SockJS = require('sockjs-client');
 const events = require('events');
 const utils = require('./utils.js');
+const collectData = require('./collect-data.js');
 const electronUtil = require('electron-util/node');
+const log = require('electron-log');
+const StreamlabsSupport = require('./software-support/StreamlabsSupport.js');
+const OBSSupport = require('./software-support/OBSSupport.js');
 
-var sock = null;
+log.transports.console.format = '{y}-{m}-{d} {h}:{i}:{s}.{ms} [{level}] > {text}';
+log.transports.file.format = '{y}-{m}-{d} {h}:{i}:{s}.{ms} [{level}] > {text}';
 
-const GET_PERFORMANCE_INTERVAL = 15 * 1000;
-var _authenticated = false;
-var _droppedFramesLatest = 0;
-var _messageMap = new Map();
-var _interval = null;
 var _servers = [];
 var _userContinent;
-var _ignoreNextDroppedFrames = false;
 var _streamDiagnosticsData = {};
 var _eventEmitter = new events.EventEmitter();
 var config = {
+	streamingSoftware: 'obs',
 	token: '',
 	ip: '127.0.0.1',
 	port: 59650
@@ -29,31 +28,42 @@ if (app.isAlreadyOpen()) {
 	return app.getApp().quit();
 }
 
-app.init(_eventEmitter);
-utils.collectData.init(_eventEmitter, app.getApp().getPath('exe'), electronUtil.isUsingAsar);
+app.init(_eventEmitter, electronUtil.isUsingAsar, log);
+collectData.init(_eventEmitter, log);
 
-var _id = 0;
-function getID() {
-	_id++;
-	return _id;
-}
+const streamlabsSupport = new StreamlabsSupport(config, _eventEmitter, log);
+const obsSupport = new OBSSupport(config, _eventEmitter, log);
+
+_eventEmitter.on('doSetConfig', (_thisConfig) => {
+	config = _thisConfig;
+
+	streamlabsSupport.setConfig(config);
+	obsSupport.setConfig(config);
+});
 
 axios.get('https://ingest.twitch.tv/ingests').then(function(response) {
-	//console.log(response.data);
+	//log.info(response.data);
 	_servers = response.data.ingests;
-	console.log('Saved Twitch ingest server list');
+	log.info('Saved Twitch ingest server list');
 }).catch(function(error) {
-	console.error('Unable to query Twitch API');
-	console.error(error);
+	log.error('Unable to query Twitch API');
+	log.error(error);
 });
 
 axios.get('https://cf-api.framed-app.com/get-location').then(function(response) {
-	console.log(response.data);
+	log.info(response.data);
 	_userContinent = response.data.continent;
-	console.log('Saved user continent');
+	log.info('Saved user continent');
 }).catch(function(error) {
-	console.error('Unable to query Framed API to get user location');
-	console.error(error);
+	log.error('Unable to query Framed API to get user location');
+	log.error(error);
+});
+
+// Shitty way of handling logs from the utils file without needing to somehow pass the ElectronLog instance just once
+process.on('warning', (warning) => {
+	if (warning.code.startsWith('FRAMED_')) {
+		log.warn(warning.message);
+	}
 });
 
 function initStreamDiagnosticsData() {
@@ -72,111 +82,39 @@ function initStreamDiagnosticsData() {
 
 initStreamDiagnosticsData();
 
+_eventEmitter.on('resetStreamDiagnosticsData', () => {
+	_streamDiagnosticsData.frames = {};
+	initStreamDiagnosticsData();
+});
+
+_eventEmitter.on('addToStreamDiagnosticsData', (timestamp, dropped) => {
+	_streamDiagnosticsData.frames[timestamp] = dropped;
+});
+
+_eventEmitter.on('runStreamDiagnostics', (timestamp) => {
+	runDiagnostics(timestamp);
+});
+
 function connectToWS() {
-	if (sock !== null) return;
-	if (!config.token) return _eventEmitter.emit('error', 'Please open settings and set the token');
-
-	sock = new SockJS(`http://${config.ip}:${config.port}/api`);
-
-	sock.onopen = function() {
-		console.log('open');
-
-		var _authRequest = utils.createJRPCMessage('auth', {
-			resource: 'TcpServerService',
-			args: [config.token]
-		}, getID());
-
-		_messageMap.set(_authRequest.id, 'auth');
-		send(_authRequest);
-
-		var _request = utils.createJRPCMessage('streamingStatusChange', {
-			resource: 'StreamingService',
-		}, getID());
-
-		_messageMap.set(_request.id, 'stateevent');
-		send(_request);
-
-		var _stateRequest = utils.createJRPCMessage('getModel', {
-			resource: 'StreamingService'
-		}, getID());
-		_messageMap.set(_stateRequest.id, 'state');
-		send(_stateRequest);
-	};
-
-	sock.onmessage = function(e) {
-		var data = JSON.parse(e.data);
-		//console.log(data);
-		if (data.id !== null && !_messageMap.has(data.id)) return;
-
-		if (data.error) {
-			console.error(data.error);
-			_eventEmitter.emit('error', data.error.message);
-			sock.close();
-			return;
-		}
-
-		if (data.id === null) {
-			handleEvent(data.result);
-			return;
-		}
-
-		switch (_messageMap.get(data.id)) {
-			case 'auth':
-				_authenticated = true;
-				console.log('Connected to Streamlabs OBS');
-				_eventEmitter.emit('connectedState', true);
-				break;
-			case 'performance':
-				handlePerformanceData(data.result);
-				break;
-			case 'state':
-				if (data.result.streamingStatus === 'live' && _interval === null) {
-					console.log('App opened after streamer went live');
-					// Don't count dropped frames from before Framed was opened
-					_ignoreNextDroppedFrames = true;
-					getPerformance();
-					_interval = setInterval(function() {
-						getPerformance();
-					}, GET_PERFORMANCE_INTERVAL);
-				}
-				break;
-		}
-
-		_messageMap.delete(data.id);
-	};
-
-	sock.onclose = function(e) {
-		console.log('close');
-		//console.log(e);
-		clearInterval(_interval);
-		_interval = null;
-		sock = null;
-		_authenticated = false;
-
-		_eventEmitter.emit('connectedState', false);
-
-		if (e.code === 1002 || e.code === 2000) {
-			_eventEmitter.emit('error', `Failed to connect to Streamlabs OBS. Error code: ${e.code} (${e.reason})`);
-		}
-	};
-
-	sock.onerror = function(err) {
-		console.log('error');
-		console.error(err);
-		sock.close();
-	};
+	switch (config.streamingSoftware) {
+		case 'streamlabs':
+			streamlabsSupport.connect();
+			break;
+		case 'obs':
+			obsSupport.connect();
+			break;
+	}
 }
 
 _eventEmitter.on('isConnected', function() {
-	if (sock !== null && _authenticated) {
-		_eventEmitter.emit('connectedState', true);
-	} else {
-		_eventEmitter.emit('connectedState', false);
+	switch (config.streamingSoftware) {
+		case 'streamlabs':
+			_eventEmitter.emit('connectedState', streamlabsSupport.isConnected());
+			break;
+		case 'obs':
+			_eventEmitter.emit('connectedState', obsSupport.isConnected());
+			break;
 	}
-});
-
-_eventEmitter.on('doSetConfig', (_thisConfig) => {
-	config = _thisConfig;
 });
 
 _eventEmitter.on('doConnect', () => {
@@ -184,72 +122,23 @@ _eventEmitter.on('doConnect', () => {
 });
 
 _eventEmitter.on('doDisconnect', () => {
-	if (sock === null) return;
-	sock.close();
+	switch (config.streamingSoftware) {
+		case 'streamlabs':
+			streamlabsSupport.disconnect();
+			break;
+		case 'obs':
+			obsSupport.disconnect();
+			break;
+	}
 });
 
 _eventEmitter.on('startCPPApi', () => {
-	utils.collectData.startTimer();
+	collectData.startTimer();
 });
 
 _eventEmitter.on('stopCPPApi', () => {
-	utils.collectData.stopTimer();
+	collectData.stopTimer();
 });
-
-function handleEvent(data) {
-	if (data.emitter === 'STREAM') {
-		switch (data.data) {
-			case 'live':
-				if (_interval === null) {
-					_streamDiagnosticsData.frames = {};
-					_droppedFramesLatest = 0;
-					initStreamDiagnosticsData();
-					_interval = setInterval(function() {
-						getPerformance();
-					}, GET_PERFORMANCE_INTERVAL);
-				}
-				break;
-			case 'offline':
-				if (_interval !== null) {
-					clearInterval(_interval);
-					_interval = null;
-				}
-				break;
-		}
-	}
-}
-
-function send(json) {
-	if (!sock || !json) return;
-	sock.send(JSON.stringify(json));
-}
-
-function getPerformance() {
-	if (!_authenticated) return;
-
-	var _performanceRequest = utils.createJRPCMessage('getModel', { resource: 'PerformanceService' }, getID());
-	_messageMap.set(_performanceRequest.id, 'performance');
-	send(_performanceRequest);
-}
-
-function handlePerformanceData(data) {
-	var timestamp = Date.now();
-	_eventEmitter.emit('frame', {
-		x: timestamp,
-		y: data.numberDroppedFrames
-	});
-
-	if (data.numberDroppedFrames > _droppedFramesLatest && !_ignoreNextDroppedFrames) {
-		_droppedFramesLatest = data.numberDroppedFrames;
-		_streamDiagnosticsData.frames[timestamp] = data.numberDroppedFrames;
-		runDiagnostics(timestamp);
-	}
-
-	if (_ignoreNextDroppedFrames) {
-		_droppedFramesLatest = data.numberDroppedFrames;
-		_ignoreNextDroppedFrames = false;
-	}
-}
 
 var _latestCPPData = null;
 
@@ -290,6 +179,7 @@ _eventEmitter.on('diagnosticsPing', (ping, timestamp) => {
 });
 
 function runDiagnostics(timestamp) {
+	log.info('Running diagnostics');
 	if (_latestCPPData !== null) {
 		_streamDiagnosticsData.system[timestamp] = _latestCPPData.system;
 	}
@@ -297,9 +187,14 @@ function runDiagnostics(timestamp) {
 	var _pingServers = utils.getRandomTwitchServers(_servers, _userContinent);
 	_streamDiagnosticsData.pings.twitch[timestamp] = [];
 
+	if (_pingServers.length < 3) {
+		_twitchPinged = 3 - (_pingServers.length - 1);
+		_eventEmitter.emit('diagnosticsPing', 'twitch', timestamp);
+	}
+
 	for (var i = 0; i < _pingServers.length; i++) {
 		let _pingLocation = utils.parseCity(_pingServers[i].name);
-		console.log(`Pinging Twitch ingest server in ${_pingLocation}`);
+		log.info(`Pinging Twitch ingest server in ${_pingLocation}`);
 
 		utils.tcpPing(utils.parseHost(_pingServers[i].url_template), 1935, function(err, data) {
 			if (err) {
@@ -309,7 +204,7 @@ function runDiagnostics(timestamp) {
 				});
 
 				_eventEmitter.emit('diagnosticsPing', 'twitch', timestamp);
-				return console.error(err);
+				return log.error(err);
 			}
 
 			_streamDiagnosticsData.pings.twitch[timestamp].push({
@@ -325,7 +220,7 @@ function runDiagnostics(timestamp) {
 		if (err) {
 			_streamDiagnosticsData.pings.google[timestamp] = -1;
 			_eventEmitter.emit('diagnosticsPing', 'google', timestamp);
-			return console.error(err);
+			return log.error(err);
 		}
 
 		_streamDiagnosticsData.pings.google[timestamp] = data.avg ? Math.round(data.avg * 100) / 100 : -1;
@@ -336,7 +231,7 @@ function runDiagnostics(timestamp) {
 		if (err) {
 			_streamDiagnosticsData.pings.truewinter[timestamp] = -1;
 			_eventEmitter.emit('diagnosticsPing', 'truewinter', timestamp);
-			return console.error(err);
+			return log.error(err);
 		}
 
 		_streamDiagnosticsData.pings.truewinter[timestamp] = data.avg ? Math.round(data.avg * 100) / 100 : -1;
@@ -347,7 +242,7 @@ function runDiagnostics(timestamp) {
 		if (err) {
 			_streamDiagnosticsData.pings.framed[timestamp] = -1;
 			_eventEmitter.emit('diagnosticsPing', 'framed', timestamp);
-			return console.error(err);
+			return log.error(err);
 		}
 
 		_streamDiagnosticsData.pings.framed[timestamp] = data.avg ? Math.round(data.avg * 100) / 100 : -1;

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, nativeTheme, Menu, dialog, shell, ipcRenderer } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeTheme, Menu, dialog, shell } = require('electron');
 const axios = require('axios').default;
 const path = require('path');
 const fs = require('fs');
@@ -18,9 +18,17 @@ const store = new Store({
 			maximum: 65535,
 			default: 59650
 		},
+		streamingSoftware: {
+			type: 'string',
+			default: 'obs'
+		},
 		ip: {
 			type: 'string',
 			default: '127.0.0.1'
+		},
+		disableHardwareAcceleration: {
+			type: 'boolean',
+			default: false
 		}
 	}
 });
@@ -34,6 +42,8 @@ var _settingsModal = null;
 var _diagModals = {};
 var _diagData = {};
 var _savesDirExists = false;
+var _prod = false;
+var _log = null;
 
 function start() {
 	function createWindow() {
@@ -44,6 +54,7 @@ function start() {
 				preload: path.join(__dirname, 'ui', 'js', 'preload', 'index.js'),
 				contextIsolation: true
 			},
+			backgroundColor: '#24242c',
 			show: false,
 			icon: path.join(__dirname, 'img', 'icon.ico')
 		});
@@ -56,6 +67,7 @@ function start() {
 				submenu: [
 					{
 						label: 'Open',
+						// eslint-disable-next-line no-empty-function
 						click: () => {}
 					},
 					{
@@ -90,6 +102,12 @@ function start() {
 						click: async () => {
 							await shell.openExternal(`https://framed-app.com/docs/v${app.getVersion()}`);
 						}
+					},
+					{
+						label: 'Logs',
+						click: async() => {
+							await shell.openPath(path.join(app.getPath('userData'), 'logs'));
+						}
 					}
 				]
 			}
@@ -114,6 +132,7 @@ function start() {
 				preload: path.join(__dirname, 'ui', 'js', 'preload', 'diagnostics.js'),
 				contextIsolation: true
 			},
+			backgroundColor: '#24242c',
 			show: false,
 			icon: path.join(__dirname, 'img', 'icon.ico')
 		});
@@ -149,6 +168,7 @@ function start() {
 				preload: path.join(__dirname, 'ui', 'js', 'preload', 'about.js'),
 				contextIsolation: true
 			},
+			backgroundColor: '#24242c',
 			icon: path.join(__dirname, 'img', 'icon.ico')
 		});
 
@@ -190,6 +210,7 @@ function start() {
 				preload: path.join(__dirname, 'ui', 'js', 'preload', 'settings.js'),
 				contextIsolation: true
 			},
+			backgroundColor: '#24242c',
 			icon: path.join(__dirname, 'img', 'icon.ico')
 		});
 
@@ -300,11 +321,25 @@ function start() {
 				return win.webContents.send('error', 'Failed to save settings. Invalid port');
 			}
 
+			if (!['streamlabs', 'obs'].includes(data.streamingSoftware)) {
+				return win.webContents.send('error', 'Failed to save settings. Invalid streaming software.');
+			}
+
+			var _prevHardwareAccelerationSettings = store.get('disableHardwareAcceleration');
+
+			store.set('streamingSoftware', data.streamingSoftware);
 			store.set('token', data.token);
 			store.set('ip', data.ip);
 			store.set('port', parseInt(data.port));
+			store.set('disableHardwareAcceleration', data.disableHardwareAcceleration);
 
 			win.webContents.send('info', 'Saved settings');
+
+			if (data.disableHardwareAcceleration !== _prevHardwareAccelerationSettings) {
+				win.webContents.send('info', `You will need to restart Framed to ${data.disableHardwareAcceleration ? 'disable' : 'enable'} hardware acceleration`);
+			}
+
+			_prevHardwareAccelerationSettings = data.disableHardwareAcceleration;
 
 			_eventEmitter.emit('doDisconnect');
 			_eventEmitter.emit('doSetConfig', data);
@@ -346,6 +381,13 @@ function start() {
 			win.webContents.send('diagnostics', data);
 		});
 
+		_eventEmitter.on('resetStreamDiagnosticsData', () => {
+			_diagData = {};
+
+			win.webContents.send('clearDiagData');
+			win.webContents.send('clearFrameData');
+		});
+
 		win.once('ready-to-show', () => {
 			win.show();
 			_eventEmitter.emit('doSetConfig', store.store);
@@ -370,19 +412,20 @@ function start() {
 		});
 
 		win.webContents.on('unresponsive', () => {
-			console.log('unresponsive');
+			_log.info('unresponsive');
 		});
 
 		win.webContents.on('crashed', () => {
-			console.log('crashed');
+			_log.info('crashed');
 		});
 
 		win.webContents.on('render-process-gone', (_, details) => {
-			console.log('gone');
-			console.log(details);
+			_log.info('gone');
+			_log.info(details);
 		});
 
 		win.webContents.on('did-finish-load', () => {
+			if (!_prod) return _log.info('Dev version detected. Skipping version check');
 			axios.get(`https://cf-api.framed-app.com/latest-version?version=v${app.getVersion()}`).then((response) => {
 				if (response.data.newer) {
 					switch (response.data.branch) {
@@ -402,7 +445,10 @@ function start() {
 	});
 
 	app.on('window-all-closed', function () {
-		if (process.platform !== 'darwin') app.quit();
+		if (process.platform !== 'darwin') {
+			app.quit();
+			_eventEmitter.emit('killNativeAPIChildProcess');
+		}
 	});
 }
 
@@ -424,10 +470,11 @@ function getDate() {
 	return moment().format('YYYY-MM-DD-HH-mm-ss');
 }
 
-function init(eventEmitter) {
+function init(eventEmitter, prod, log) {
 	if (!gotTheLock) {
 		return app.quit();
 	} else {
+		// eslint-disable-next-line no-unused-vars
 		app.on('second-instance', (event, commandLine, workingDirectory) => {
 			// Someone tried to run a second instance, we should focus our window.
 			if (win) {
@@ -437,7 +484,14 @@ function init(eventEmitter) {
 		});
 	}
 
+	if (store.get('disableHardwareAcceleration')) {
+		log.info('Disabling hardware acceleration');
+		app.disableHardwareAcceleration();
+	}
+
 	_eventEmitter = eventEmitter;
+	_prod = prod;
+	_log = log;
 
 	ensureExists(path.join(app.getPath('userData'), 'saves'), function(err) {
 		if (err) {
@@ -459,7 +513,11 @@ function getApp() {
 }
 
 process.on('uncaughtException', function (err) {
-	console.log(err);
+	if (_log) {
+		_log.error(err);
+	} else {
+		console.error(err);
+	}
 });
 
 module.exports.init = init;

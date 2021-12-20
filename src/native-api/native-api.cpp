@@ -35,6 +35,7 @@
 #endif
 
 #include <iostream>
+#include <node.h>
 #include <windows.h>
 #include <stdio.h>
 #include <psapi.h>
@@ -46,15 +47,17 @@
 #include <iphlpapi.h>
 #include <netioapi.h>
 #include <winioctl.h>
+#include <tlhelp32.h>
 #include <vector>
 #include <ctime>
 #include <chrono>
 #include <cmath>
+#include <string>
 //#include <d3dkmthk.h>
 //#include <cfgmgr32.h>
 
 #pragma comment(lib, "iphlpapi.lib")
-#pragma comment(lib, "netio.lib")
+//#pragma comment(lib, "netio.lib")
 
 // memory_uss()
 typedef struct _MEMORY_WORKING_SET_BLOCK {
@@ -234,19 +237,16 @@ psutil_pid_is_running(DWORD pid) {
     return pid_in_pids(pid);
 }
 
-static int
-psutil_GetProcWsetInformation(
-        DWORD pid,
+static int psutil_GetProcWsetInformation(
         HANDLE hProcess,
-        PMEMORY_WORKING_SET_INFORMATION *wSetInfo)
-{
+        PMEMORY_WORKING_SET_INFORMATION *wSetInfo) {
     NTSTATUS status;
     PVOID buffer;
     SIZE_T bufferSize;
 
-    bufferSize = 150000;
+    bufferSize = 0x8000;
     buffer = MALLOC_ZERO(bufferSize);
-    if (! buffer) {
+    if (!buffer) {
         //PyErr_NoMemory();
         return 1;
     }
@@ -266,7 +266,7 @@ psutil_GetProcWsetInformation(
             return 1;
         }
         buffer = MALLOC_ZERO(bufferSize);
-        if (! buffer) {
+        if (!buffer) {
             return 1;
         }
     }
@@ -294,8 +294,7 @@ psutil_getpagesize() {
 
 typedef std::basic_string<TCHAR> tstring;
 
-tstring
-getProcessName(int pid) {
+tstring getProcessName(int pid) {
 	HANDLE hProcess;
 	TCHAR szProcessName[MAX_PATH] = TEXT("<unknown>");
 
@@ -320,20 +319,21 @@ getProcessName(int pid) {
 	return szProcessName;
 }
 
-void proc_memory_uss(DWORD pid) {
+void proc_memory_uss(DWORD pid, LPSTR pName, std::string& out) {
 	HANDLE hProcess;
     PSUTIL_PROCESS_WS_COUNTERS wsCounters;
     PMEMORY_WORKING_SET_INFORMATION wsInfo;
     ULONG_PTR i;
 
-    hProcess = OpenProcess(  PROCESS_QUERY_INFORMATION, FALSE, pid );
+    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid);
     if (hProcess == NULL)
         return;
 
-    if (psutil_GetProcWsetInformation(pid, hProcess, &wsInfo) != 0) {
+    if (psutil_GetProcWsetInformation(hProcess, &wsInfo) != 0) {
         CloseHandle(hProcess);
         return;
-    }
+	}
+
     memset(&wsCounters, 0, sizeof(PSUTIL_PROCESS_WS_COUNTERS));
 
     for (i = 0; i < wsInfo->NumberOfEntries; i++) {
@@ -357,13 +357,17 @@ void proc_memory_uss(DWORD pid) {
     }
 
 	// While this won't give the exact value that task manager shows, it should be close enough to be a useful metric
-	tcout << getProcessName(pid) << "-" << pid << ": mem: " << wsCounters.NumberOfPrivatePages * psutil_getpagesize() << "\n";
+	out = out + pName + "-" + std::to_string(pid) + ": mem: " + std::to_string(wsCounters.NumberOfPrivatePages * psutil_getpagesize()) + "\n";
+
+	/*tcout << getProcessName(pid) << "-";
+	tcout << std::to_string(pid) << ": mem: ";
+	tcout << std::to_string(wsCounters.NumberOfPrivatePages * psutil_getpagesize()) << "\n";*/
 
 	HeapFree(GetProcessHeap(), 0, wsInfo);
     CloseHandle(hProcess);
 }
 
-void proc_io(DWORD pid) {
+void proc_io(DWORD pid, std::string& out) {
 	HANDLE hProcess;
 	IO_COUNTERS ioCounters;
 
@@ -372,22 +376,25 @@ void proc_io(DWORD pid) {
         return;
 
 	if (GetProcessIoCounters(hProcess, &ioCounters)) {
-		tcout << getProcessName(pid) << "-" << pid << ": ioRead: " << ioCounters.ReadTransferCount << "\n";
-		tcout << getProcessName(pid) << "-" << pid << ": ioWrite: " << ioCounters.WriteTransferCount << "\n";
+		out = out + getProcessName(pid) + "-" + std::to_string(pid) + ": ioRead: " + std::to_string(ioCounters.ReadTransferCount) + "\n";
+		out = out + getProcessName(pid) + "-" + std::to_string(pid) + ": ioWrite: " + std::to_string(ioCounters.WriteTransferCount) + "\n";
 	}
 
 	CloseHandle(hProcess);
 }
 
-void sys_mem() {
+void sys_mem(std::string& out) {
 	MEMORYSTATUSEX memInfo;
 	memInfo.dwLength = sizeof(MEMORYSTATUSEX);
 	GlobalMemoryStatusEx(&memInfo);
 	DWORDLONG totalPhysMem = memInfo.ullTotalPhys;
 	DWORDLONG physMemUsed = memInfo.ullTotalPhys - memInfo.ullAvailPhys;
 
-	tcout << "__framed_sys_mem: memTotal: " << totalPhysMem << "\n";
-	tcout << "__framed_sys_mem: memUsed: " << physMemUsed << "\n";
+	//tcout << "__framed_sys_mem: memTotal: " << totalPhysMem << "\n";
+	//tcout << "__framed_sys_mem: memUsed: " << physMemUsed << "\n";
+	
+	out = out + "__framed_sys_mem: memTotal: " + std::to_string(totalPhysMem) + "\n";
+	out = out + "__framed_sys_mem: memUsed: " + std::to_string(physMemUsed) + "\n";
 }
 
 static PIP_ADAPTER_ADDRESSES
@@ -425,7 +432,7 @@ psutil_get_nic_addresses(void) {
 /*
  * Return a Python list of named tuples with overall network I/O information
  */
-void psutil_net_io_counters() {
+void psutil_net_io_counters(std::string& out) {
     DWORD dwRetVal = 0;
     MIB_IF_ROW2 *pIfRow = NULL;
     PIP_ADAPTER_ADDRESSES pAddresses = NULL;
@@ -433,6 +440,7 @@ void psutil_net_io_counters() {
 
 	// Assume that the first non-zero counter interface is the main interface
 	BOOL interfaceFound = false;
+	int intId = 0;
 
     pAddresses = psutil_get_nic_addresses();
     if (pAddresses == NULL)
@@ -441,7 +449,8 @@ void psutil_net_io_counters() {
 
     while (pCurrAddresses) {
 		if (interfaceFound) {
-			break;
+			// Will instead return all interfaces and pick highest bytes as main one in Node.js
+			//break;
 		}
         pIfRow = (MIB_IF_ROW2 *) MALLOC_ZERO(sizeof(MIB_IF_ROW2));
         if (pIfRow == NULL) {
@@ -467,14 +476,15 @@ void psutil_net_io_counters() {
 		}
 
 		// Would preferably want the actual interface name, but this works too
-		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": inBytes: " << pIfRow->InOctets << "\n";
-		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": outBytes: " << pIfRow->OutOctets << "\n";
-		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": inErrors: " << pIfRow->InErrors << "\n";
-		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": outErrors: " << pIfRow->OutErrors << "\n";
-		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": inDiscards: " << pIfRow->InDiscards << "\n";
-		std::cout << "__framed_sys_net-" << pIfRow->InterfaceIndex << ": outDiscards: " << pIfRow->OutDiscards << "\n";
+		out = out + "__framed_sys_net-" + std::to_string(intId) + ": inBytes: " + std::to_string(pIfRow->InOctets) + "\n";
+		out = out + "__framed_sys_net-" + std::to_string(intId) + ": outBytes: " + std::to_string(pIfRow->OutOctets) + "\n";
+		out = out + "__framed_sys_net-" + std::to_string(intId) + ": inErrors: " + std::to_string(pIfRow->InErrors) + "\n";
+		out = out + "__framed_sys_net-" + std::to_string(intId) + ": outErrors: " + std::to_string(pIfRow->OutErrors) + "\n";
+		out = out + "__framed_sys_net-" + std::to_string(intId) + ": inDiscards: " + std::to_string(pIfRow->InDiscards) + "\n";
+		out = out + "__framed_sys_net-" + std::to_string(intId) + ": outDiscards: " + std::to_string(pIfRow->OutDiscards) + "\n";
 
 		interfaceFound = true;
+		intId++;
 
         FREE(pIfRow);
         pCurrAddresses = pCurrAddresses->Next;
@@ -483,7 +493,7 @@ void psutil_net_io_counters() {
     FREE(pAddresses);
 }
 
-void sys_disk() { 
+void sys_disk(std::string& out) {
     HANDLE dev = CreateFile("\\\\.\\C:", 
         FILE_READ_ATTRIBUTES, 
         FILE_SHARE_READ | FILE_SHARE_WRITE, 
@@ -513,8 +523,8 @@ void sys_disk() {
         return;
     }
 
-    std::cout << "__framed_sys_disk-c: read: " << disk_info.BytesRead.QuadPart << "\n";
-    std::cout << "__framed_sys_disk-c: write: " << disk_info.BytesWritten.QuadPart << "\n";
+    out = out + "__framed_sys_disk-c: read: " + std::to_string(disk_info.BytesRead.QuadPart) + "\n";
+    out = out + "__framed_sys_disk-c: write: " + std::to_string(disk_info.BytesWritten.QuadPart) + "\n";
 }
 
 uint64_t getEpochTime() {
@@ -537,11 +547,16 @@ struct processCPUTime {
 
 std::vector<processCPUTime> processCPUTimes;
 
+// https://stackoverflow.com/a/8477355
 double filetime_to_double(struct _FILETIME &ft) {
-	unsigned long long t = ft.dwLowDateTime + ((unsigned long long)ft.dwHighDateTime << 32);
+	ULARGE_INTEGER t;
+
+	t.LowPart = ft.dwLowDateTime;
+	t.HighPart = ft.dwHighDateTime;
+
 	// t is in 100 nano second increments
 	// 1e6 is the conversion from nanosecond to millisecond
-	return t / 1e6 * 100;
+	return t.QuadPart / 1e6 * 100;
 }
 
 int getCPUTime(DWORD pid, processCPUTime* p) {
@@ -659,7 +674,8 @@ void getAwaitedCPUTimes() {
 	return 0;
 }*/
 
-/*struct sysCPUTimes {
+struct sysCPUTimes {
+	double idleTime;
 	double userTime;
 	double systemTime;
 	uint64_t time;
@@ -676,6 +692,7 @@ int sys_cpu_init() {
 		return 0;
 	}
 
+	cpuTimes1.idleTime = filetime_to_double(idleTime);
 	cpuTimes1.userTime = filetime_to_double(userTime);
 	cpuTimes1.systemTime = filetime_to_double(kernelTime);
 	cpuTimes1.time = getEpochTime();
@@ -683,41 +700,45 @@ int sys_cpu_init() {
 	return 1;
 }
 
-// This returns a value around 4% no matter how high or low the CPU usage actually is
-void sys_cpu() {
+void sys_cpu(std::string& out) {
 	sysCPUTimes cpuTimes2;
 	FILETIME idleTime;
 	FILETIME kernelTime;
 	FILETIME userTime;
 
 	if (!GetSystemTimes(&idleTime, &kernelTime, &userTime)) {
+		out = out + "__framed_sys_cpu: cpu: 0\n";
 		return;
 	}
 
+	cpuTimes2.idleTime = filetime_to_double(idleTime);
 	cpuTimes2.userTime = filetime_to_double(userTime);
 	cpuTimes2.systemTime = filetime_to_double(kernelTime);
 	cpuTimes2.time = getEpochTime();
 
+	double idleTimeD = cpuTimes2.idleTime - cpuTimes1.idleTime;
 	double userTimeD = cpuTimes2.userTime - cpuTimes1.userTime;
 	double systemTimeD = cpuTimes2.systemTime - cpuTimes1.systemTime;
 
-	double cpuT = static_cast<double>(userTimeD + systemTimeD) / (cpuTimes2.time - cpuTimes1.time);
-	double cpu = ceil(cpuT * 100.0) / 100.0;
+	//double cpuT = static_cast<double>(100 / ((userTimeD + systemTimeD) / (cpuTimes2.time - cpuTimes1.time)));
+	double cpuT = static_cast<double>((systemTimeD + userTimeD - idleTimeD) * 100 / (systemTimeD + userTimeD));
+	// Due to limitations of the parser, this needs to be an integer
+	int cpu = ceil(cpuT * 100.0);
 
-	std::cout << "_framed_sys_cpu: ut1: " << cpuTimes1.userTime << "\n";
-	std::cout << "_framed_sys_cpu: ut2: " << cpuTimes2.userTime << "\n";
-	std::cout << "_framed_sys_cpu: tt1: " << cpuTimes1.time << "\n";
-	std::cout << "_framed_sys_cpu: st1: " << cpuTimes1.systemTime << "\n";
-	std::cout << "_framed_sys_cpu: st2: " << cpuTimes2.systemTime << "\n";
-	std::cout << "_framed_sys_cpu: tt2: " << cpuTimes2.time << "\n";
-	std::cout << "_framed_sys_cpu: utd: " << userTimeD << "\n";
-	std::cout << "_framed_sys_cpu: std: " << systemTimeD << "\n";
+	//std::cout << "_framed_sys_cpu: ut1: " << std::to_string(cpuTimes1.userTime) << "\n";
+	//std::cout << "_framed_sys_cpu: ut2: " << std::to_string(cpuTimes2.userTime) << "\n";
+	//std::cout << "_framed_sys_cpu: tt1: " << cpuTimes1.time << "\n";
+	//std::cout << "_framed_sys_cpu: st1: " << std::to_string(cpuTimes1.systemTime) << "\n";
+	//std::cout << "_framed_sys_cpu: st2: " << std::to_string(cpuTimes2.systemTime) << "\n";
+	//std::cout << "_framed_sys_cpu: tt2: " << cpuTimes2.time << "\n";
+	//std::cout << "_framed_sys_cpu: utd: " << userTimeD << "\n";
+	//std::cout << "_framed_sys_cpu: std: " << systemTimeD << "\n";
 
-	std::cout << "_framed_sys_cpu: add: " << (userTimeD + systemTimeD) << "\n";
-	std::cout << "_framed_sys_cpu: time: " << (cpuTimes2.time - cpuTimes1.time) << "\n";
+	//std::cout << "_framed_sys_cpu: add: " << (userTimeD + systemTimeD) << "\n";
+	//std::cout << "_framed_sys_cpu: time: " << (cpuTimes2.time - cpuTimes1.time) << "\n";
 
-	std::cout << "__framed_sys_cpu: cpu: " << cpu << "\n";
-}*/
+	out = out + "__framed_sys_cpu: cpu: " + std::to_string(cpu) + "\n";
+}
 
 BOOL IsElevated( ) {
     BOOL fRet = FALSE;
@@ -735,7 +756,69 @@ BOOL IsElevated( ) {
     return fRet;
 }
 
-int main( void ) {
+void FramedGetPerfData(const v8::FunctionCallbackInfo<v8::Value>& args) {
+	v8::Isolate* isolate = args.GetIsolate();
+
+	std::string outputString = "";
+
+	bool cpuInit = sys_cpu_init();
+
+	sys_mem(outputString);
+	psutil_net_io_counters(outputString);
+	sys_disk(outputString);
+
+	if (cpuInit) {
+		// By initializing above, we can run other things and
+		// sleep for less time while still getting WAIT_TIME of data.
+		// With the current (v0.0.2) code, this only results in ~5ms
+		// time saved, but could be useful for the future.
+		uint64_t diff = getEpochTime() - cpuTimes1.time;
+
+		int WAIT_TIME = 500;
+
+		if (diff < WAIT_TIME) {
+			Sleep(WAIT_TIME - diff);
+		}
+
+		// CPU calculation is still kinda buggy though
+		sys_cpu(outputString);
+	} else {
+		outputString = outputString + "__framed_sys_cpu: cpu: 0\n";
+	}
+
+	// Until I can find a solution to the high CPU usage, comment this out
+	/*WTS_PROCESS_INFO* processes = NULL;
+	DWORD count = 0;
+
+	if (WTSEnumerateProcesses(WTS_CURRENT_SERVER_HANDLE, NULL, 1, &processes, &count)) {
+		for (DWORD i = 0; i < count; i++) {
+			proc_memory_uss(processes[i].ProcessId, processes[i].pProcessName, outputString);
+			//proc_io(processes[i].ProcessId, outputString);
+			//storeInitialCPUTimes(processes[i].ProcessId);
+
+			//tcout << processes[i].pProcessName << "-" << processes[i].ProcessId << "\n";
+		}
+
+		//Sleep(100);
+		//getAwaitedCPUTimes();
+	}
+
+	if (processes) {
+		WTSFreeMemory(processes);
+		processes = NULL;
+	}*/
+
+	v8::Local<v8::String> output = v8::String::NewFromUtf8(isolate, outputString.c_str()).ToLocalChecked();
+	args.GetReturnValue().Set(output);
+}
+
+void Init(v8::Local<v8::Object> exports) {
+	NODE_SET_METHOD(exports, "getPerfData", FramedGetPerfData);
+}
+
+
+
+/*int main( void ) {
 	if (IsElevated()) {
 		std::cout << "Due to a bug, Framed C++ API must be run without administrative privileges";
 		return 1;
@@ -755,7 +838,6 @@ int main( void ) {
 	// for Framed C++ API, when this is not the case. The system CPU usage graphs
 	// clearly show an increase in CPU usage when this program runs.
 	// In other words, je suis un idiot.
-	// Until I can find a solution to the high CPU usage, comment this out
 	/*WTS_PROCESS_INFO* processes = NULL;
 	DWORD count = 0;
 
@@ -775,5 +857,7 @@ int main( void ) {
 		processes = NULL;
 	}*/
 
-   return 0;
-}
+   /*return 0;
+}*/
+
+NODE_MODULE(NODE_GYP_MODULE_NAME, Init)
