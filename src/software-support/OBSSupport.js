@@ -48,10 +48,6 @@ class OBSSupport extends SoftwareSupport {
 			y: _nowDroppedFrames
 		});
 
-		console.log(`n: ${_nowDroppedFrames}`);
-		console.log(`l: ${this._droppedFramesLatest}`);
-		console.log(`i: ${this._ignoreNextDroppedFrames}`);
-
 		if (_nowDroppedFrames > this._droppedFramesLatest && !this._ignoreNextDroppedFrames) {
 			this._droppedFramesLatest = _nowDroppedFrames;
 			this._extEventEmitter.emit('addToStreamDiagnosticsData', timestamp, _nowDroppedFrames);
