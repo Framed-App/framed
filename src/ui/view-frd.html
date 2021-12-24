@@ -4,7 +4,7 @@
 		<meta charset="UTF-8">
 		<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'">
 		<meta http-equiv="X-Content-Security-Policy" content="default-src 'self'; script-src 'self'">
-		<title>Framed</title>
+		<title>Framed | Viewing FRD file</title>
 		<link rel="stylesheet" href="css/dark-theme.css">
 		<link rel="stylesheet" href="css/fontawesome/css/all.min.css">
 	</head>
@@ -16,24 +16,25 @@
 			</div>
 			<span class="pad"></span>
 			<h1>System Stats</h1>
+			<p id="sysStatsTime">Hover over a point above to see system stats</p>
 			<div class="system-stats">
 				<div class="system-stat" title="CPU">
-					<i class="fas fa-microchip"></i> <span id="system-cpu">0%</span>
+					<i class="fas fa-microchip"></i> <span id="system-cpu"></span>
 				</div>
 				<div class="system-stat" title="Memory">
-					<i class="fas fa-memory"></i> <span id="system-memory">0 GB</span>
+					<i class="fas fa-memory"></i> <span id="system-memory"></span>
 				</div>
 				<div class="system-stat" title="Disk (read)">
-					<i class="fas fa-upload"></i> <span id="system-disk-read">0 MB/s</span>
+					<i class="fas fa-upload"></i> <span id="system-disk-read"></span>
 				</div>
 				<div class="system-stat" title="Disk (write)">
-					<i class="fas fa-download"></i> <span id="system-disk-write">0  MB/s</span>
+					<i class="fas fa-download"></i> <span id="system-disk-write"></span>
 				</div>
 				<div class="system-stat" title="Download">
-					<i class="fas fa-cloud-download-alt"></i> <span id="system-download">0 Mbps</span>
+					<i class="fas fa-cloud-download-alt"></i> <span id="system-download"></span>
 				</div>
 				<div class="system-stat" title="Upload">
-					<i class="fas fa-cloud-upload-alt"></i> <span id="system-upload">0 Mbps</span>
+					<i class="fas fa-cloud-upload-alt"></i> <span id="system-upload"></span>
 				</div>
 			</div>
 			<span class="pad"></span>
@@ -44,19 +45,11 @@
 		<div id="notices"></div>
 		<div class="footer" id="mainFooter">
 			<span>Framed v<span id="version"></span></span>
-			<span class="footer-controls">
-				<span class="footer-control">
-					<i class="fas fa-link" id="connectedStatus" title="Connection Status"></i>
-					<i class="fab fa-twitter" id="twitterBtn" title="Twitter"></i>
-					<i class="fas fa-question" id="helpBtn" title="Help"></i>
-					<i class="fas fa-cog" id="settingsBtn" title="Settings"></i>
-				</span>
-			</span>
+			<span>FRD file: <span id="frdFile"></span></span>
 		</div>
 		<script src="js/renderer/deps/moment.js"></script>
-		<script src="js/renderer/index.js"></script>
 		<script src="js/renderer/deps/chart.js"></script>
 		<script src="js/renderer/deps/chartjs-adapter-moment.js"></script>
-		<script src="js/renderer/additional/index/dropped-frames-chart.js"></script>
+		<script src="js/renderer/view-frd.js"></script>
 	</body>
 </html>

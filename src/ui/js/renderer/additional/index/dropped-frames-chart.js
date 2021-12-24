@@ -17,6 +17,11 @@ var chartConfig = {
 				min: 0
 			}
 		},
+		plugins: {
+			legend: {
+				display: false
+			}
+		},
 		animation: false
 	}
 };

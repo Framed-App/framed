@@ -5,6 +5,7 @@ const fs = require('fs');
 const moment = require('moment');
 const isIp = require('is-ip');
 const Store = require('electron-store');
+const utils = require('./utils.js');
 
 const store = new Store({
 	schema: {
@@ -41,6 +42,9 @@ var _aboutModal = null;
 var _settingsModal = null;
 var _diagModals = {};
 var _diagData = {};
+var _viewFRDWindows = {};
+var _viewFRDDiagWindows = {};
+var _viewFRDData = {};
 var _savesDirExists = false;
 var _prod = false;
 var _log = null;
@@ -67,8 +71,9 @@ function start() {
 				submenu: [
 					{
 						label: 'Open',
-						// eslint-disable-next-line no-empty-function
-						click: () => {}
+						click: () => {
+							showOpenDialog();
+						}
 					},
 					{
 						label: 'Save',
@@ -117,6 +122,45 @@ function start() {
 		win.setMenu(menu);
 	}
 
+	function createViewFRDWindow(filename) {
+		if (_viewFRDWindows[filename]) {
+			return _viewFRDWindows[filename].focus();
+		}
+
+		if (!_viewFRDData[filename]) return;
+
+		_viewFRDWindows[filename] = new BrowserWindow({
+			width: 700,
+			height: 550,
+			webPreferences: {
+				preload: path.join(__dirname, 'ui', 'js', 'preload', 'view-frd.js'),
+				contextIsolation: true
+			},
+			backgroundColor: '#24242c',
+			show: false,
+			icon: path.join(__dirname, 'img', 'icon.ico')
+		});
+
+		_viewFRDWindows[filename].loadFile(path.join(__dirname, 'ui', 'view-frd.html'));
+		_viewFRDWindows[filename].removeMenu();
+
+		_viewFRDWindows[filename].once('ready-to-show', () => {
+			_viewFRDWindows[filename].show();
+		});
+
+		_viewFRDWindows[filename].on('closed', () => {
+			delete _viewFRDWindows[filename];
+			delete _viewFRDData[filename];
+		});
+
+		_viewFRDWindows[filename].webContents.on('did-finish-load', () => {
+			_viewFRDWindows[filename].webContents.send('frdData', {
+				name: filename,
+				data: _viewFRDData[filename]
+			});
+		});
+	}
+
 	// This was intended to be a modal but this works too
 	function createDiagnosticsModal(timestamp) {
 		if (_diagModals[timestamp]) {
@@ -150,6 +194,41 @@ function start() {
 
 		_diagModals[timestamp].webContents.on('did-finish-load', () => {
 			_diagModals[timestamp].webContents.send('diagnostics', _diagData[timestamp]);
+		});
+	}
+
+	function createFRDDiagWindow(filename, timestamp) {
+		if (_viewFRDDiagWindows[`${filename}-${timestamp}`]) {
+			return _viewFRDDiagWindows[`${filename}-${timestamp}`].focus();
+		}
+
+		if (!_viewFRDData[filename][timestamp]) return;
+
+		_viewFRDDiagWindows[`${filename}-${timestamp}`] = new BrowserWindow({
+			width: 600,
+			height: 500,
+			webPreferences: {
+				preload: path.join(__dirname, 'ui', 'js', 'preload', 'diagnostics.js'),
+				contextIsolation: true
+			},
+			backgroundColor: '#24242c',
+			show: false,
+			icon: path.join(__dirname, 'img', 'icon.ico')
+		});
+
+		_viewFRDDiagWindows[`${filename}-${timestamp}`].loadFile(path.join(__dirname, 'ui', 'diagnostics.html'));
+		_viewFRDDiagWindows[`${filename}-${timestamp}`].removeMenu();
+
+		_viewFRDDiagWindows[`${filename}-${timestamp}`].once('ready-to-show', () => {
+			_viewFRDDiagWindows[`${filename}-${timestamp}`].show();
+		});
+
+		_viewFRDDiagWindows[`${filename}-${timestamp}`].on('closed', () => {
+			delete _viewFRDDiagWindows[`${filename}-${timestamp}`];
+		});
+
+		_viewFRDDiagWindows[`${filename}-${timestamp}`].webContents.on('did-finish-load', () => {
+			_viewFRDDiagWindows[`${filename}-${timestamp}`].webContents.send('diagnostics', _viewFRDData[filename][timestamp]);
 		});
 	}
 
@@ -237,6 +316,41 @@ function start() {
 		});
 	}
 
+	function showOpenDialog() {
+		dialog.showOpenDialog(win, {
+			defaultPath: path.join(app.getPath('userData'), 'saves'),
+			filters: [{
+				name: 'Framed Data File',
+				extensions: ['frd']
+			}]
+		}).then(function(data) {
+			if (data.canceled) return;
+			if (data.filePaths.length !== 1) return;
+
+			fs.readFile(data.filePaths[0], function(err, frdData) {
+				if (!win) return;
+
+				if (err) {
+					return win.webContents.send('error', `Failed to load data file. Error: ${err.name}`);
+				}
+
+				var frdJson = JSON.parse(frdData.toString());
+				var frdName = path.parse(data.filePaths[0]).name;
+				var validator = utils.validateFileData(frdJson);
+
+				if (!validator.valid) {
+					_log.error(`Failed to open data file. Invalid format. ${utils.validateFileData(frdJson).message}`);
+					return win.webContents.send('error', 'Failed to open data file. Invalid format');
+				}
+
+				_viewFRDData[frdName] = frdJson;
+				createViewFRDWindow(frdName);
+			});
+		}).catch(function(err) {
+			win.webContents.send('error', `Failed to show file dialog: ${err.name}`);
+		});
+	}
+
 	function showSaveDialog(framedData) {
 		if (Object.keys(framedData).length === 0) {
 			return win.webContents.send('error', 'No diagnostics data to save');
@@ -260,6 +374,8 @@ function start() {
 
 				win.webContents.send('info', `Saved data file to ${data.filePath}`);
 			});
+		}).catch(function(err) {
+			win.webContents.send('error', `Failed to show file dialog: ${err.name}`);
 		});
 	}
 
@@ -285,6 +401,10 @@ function start() {
 			if (_aboutModal !== null) {
 				_aboutModal.webContents.send('version', app.getVersion());
 			}
+
+			for (var f in _viewFRDWindows) {
+				_viewFRDWindows[f].webContents.send('version', app.getVersion());
+			}
 		});
 
 		ipcMain.on('isConnected', () => {
@@ -293,6 +413,12 @@ function start() {
 
 		ipcMain.on('doConnectToWS', () => {
 			_eventEmitter.emit('doConnect');
+		});
+
+		ipcMain.on('showFRDDiagModal', (_, data) => {
+			if (!Object.prototype.hasOwnProperty.call(_viewFRDData, data.filename)) return;
+
+			createFRDDiagWindow(data.filename, data.timestamp);
 		});
 
 		ipcMain.on('showDiagModal', (_, data) => {
@@ -398,6 +524,14 @@ function start() {
 		win.on('closed', () => {
 			for (var diagWin in _diagModals) {
 				_diagModals[diagWin].close();
+			}
+
+			for (var f in _viewFRDWindows) {
+				_viewFRDWindows[f].close();
+			}
+
+			for (var d in _viewFRDDiagWindows) {
+				_viewFRDDiagWindows[d].close();
 			}
 
 			if (_aboutModal !== null) {

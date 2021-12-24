@@ -5,7 +5,7 @@ const schema = {
 	type: 'object',
 	additionalProperties: false,
 	patternProperties: {
-		'/[0-9]+$': {
+		'^[0-9]+$': {
 			type: 'object',
 			properties: {
 				timestamp: { type: 'number' },

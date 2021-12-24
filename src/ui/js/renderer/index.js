@@ -68,7 +68,7 @@ function sanitize(string) {
 	};
 
 	for (var char in chars) {
-		string = string.replace(char, chars[char]);
+		string = string.toString().replaceAll(char, chars[char]);
 	}
 
 	return string;
