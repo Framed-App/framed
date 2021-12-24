@@ -44,7 +44,8 @@
 		},
 		"nsis": {
 			"oneClick": false,
-			"license": "LICENSE.md"
+			"license": "LICENSE.md",
+			"artifactName": "${productName}-Setup-v${version}.${ext}"
 		}
 	}
 }
