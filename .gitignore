@@ -5,6 +5,9 @@ test*
 dist
 src/native-api/build/
 
+# External dependency
+src/native-api/lib/nlohmann/json.hpp
+
 # Legacy native code
 src/framed-api.cpp
 src/build-framed-cpp.bat

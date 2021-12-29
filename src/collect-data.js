@@ -284,7 +284,7 @@ function run() {
 	}, _interval);
 }*/
 
-function parseLine(line) {
+/*function parseLine(line) {
 	var _output = {};
 
 	var lineArr = line.split(':');
@@ -307,7 +307,7 @@ function parseLine(line) {
 
 function removeWhitespace(string) {
 	return string.replace(/^\W/g, '').replace(/\W$/g, '');
-}
+}*/
 
 //var _cpuData = 0;
 //var _cppData = null;
