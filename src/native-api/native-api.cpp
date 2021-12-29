@@ -53,11 +53,14 @@
 #include <chrono>
 #include <cmath>
 #include <string>
+#include "lib/nlohmann/json.hpp"
 //#include <d3dkmthk.h>
 //#include <cfgmgr32.h>
 
 #pragma comment(lib, "iphlpapi.lib")
 //#pragma comment(lib, "netio.lib")
+
+using json = nlohmann::json;
 
 // memory_uss()
 typedef struct _MEMORY_WORKING_SET_BLOCK {
@@ -383,18 +386,15 @@ void proc_io(DWORD pid, std::string& out) {
 	CloseHandle(hProcess);
 }
 
-void sys_mem(std::string& out) {
+void sys_mem(json& j) {
 	MEMORYSTATUSEX memInfo;
 	memInfo.dwLength = sizeof(MEMORYSTATUSEX);
 	GlobalMemoryStatusEx(&memInfo);
 	DWORDLONG totalPhysMem = memInfo.ullTotalPhys;
 	DWORDLONG physMemUsed = memInfo.ullTotalPhys - memInfo.ullAvailPhys;
 
-	//tcout << "__framed_sys_mem: memTotal: " << totalPhysMem << "\n";
-	//tcout << "__framed_sys_mem: memUsed: " << physMemUsed << "\n";
-	
-	out = out + "__framed_sys_mem: memTotal: " + std::to_string(totalPhysMem) + "\n";
-	out = out + "__framed_sys_mem: memUsed: " + std::to_string(physMemUsed) + "\n";
+	j["system"]["memory"]["memTotal"] = totalPhysMem;
+	j["system"]["memory"]["memUsed"] = physMemUsed;
 }
 
 static PIP_ADAPTER_ADDRESSES
@@ -429,18 +429,21 @@ psutil_get_nic_addresses(void) {
     return buffer;
 }
 
-/*
- * Return a Python list of named tuples with overall network I/O information
- */
-void psutil_net_io_counters(std::string& out) {
+void psutil_net_io_counters(json& j) {
     DWORD dwRetVal = 0;
     MIB_IF_ROW2 *pIfRow = NULL;
     PIP_ADAPTER_ADDRESSES pAddresses = NULL;
     PIP_ADAPTER_ADDRESSES pCurrAddresses = NULL;
 
-	// Assume that the first non-zero counter interface is the main interface
-	BOOL interfaceFound = false;
-	int intId = 0;
+	// For all interfaces, if the download is higher than other interfaces
+	// it is assumed that it's the main interface. Probably a shit way to
+	// do it, but it works.
+	ULONG64 maxDL = 0;
+	ULONG64 maxDLUpload = 0;
+	ULONG64 maxDLInErrors = 0;
+	ULONG64 maxDLOutErrors = 0;
+	ULONG64 maxDLInDiscards = 0;
+	ULONG64 maxDLOutDiscards = 0;
 
     pAddresses = psutil_get_nic_addresses();
     if (pAddresses == NULL)
@@ -448,10 +451,6 @@ void psutil_net_io_counters(std::string& out) {
     pCurrAddresses = pAddresses;
 
     while (pCurrAddresses) {
-		if (interfaceFound) {
-			// Will instead return all interfaces and pick highest bytes as main one in Node.js
-			//break;
-		}
         pIfRow = (MIB_IF_ROW2 *) MALLOC_ZERO(sizeof(MIB_IF_ROW2));
         if (pIfRow == NULL) {
             //PyErr_NoMemory();
@@ -475,25 +474,30 @@ void psutil_net_io_counters(std::string& out) {
 			continue;
 		}
 
-		// Would preferably want the actual interface name, but this works too
-		out = out + "__framed_sys_net-" + std::to_string(intId) + ": inBytes: " + std::to_string(pIfRow->InOctets) + "\n";
-		out = out + "__framed_sys_net-" + std::to_string(intId) + ": outBytes: " + std::to_string(pIfRow->OutOctets) + "\n";
-		out = out + "__framed_sys_net-" + std::to_string(intId) + ": inErrors: " + std::to_string(pIfRow->InErrors) + "\n";
-		out = out + "__framed_sys_net-" + std::to_string(intId) + ": outErrors: " + std::to_string(pIfRow->OutErrors) + "\n";
-		out = out + "__framed_sys_net-" + std::to_string(intId) + ": inDiscards: " + std::to_string(pIfRow->InDiscards) + "\n";
-		out = out + "__framed_sys_net-" + std::to_string(intId) + ": outDiscards: " + std::to_string(pIfRow->OutDiscards) + "\n";
-
-		interfaceFound = true;
-		intId++;
+		if (pIfRow->InOctets > maxDL) {
+			maxDL = pIfRow->InOctets;
+			maxDLUpload = pIfRow->OutOctets;
+			maxDLInErrors = pIfRow->InErrors;
+			maxDLOutErrors = pIfRow->OutErrors;
+			maxDLInDiscards = pIfRow->InDiscards;
+			maxDLOutDiscards = pIfRow->OutDiscards;
+		}
 
         FREE(pIfRow);
         pCurrAddresses = pCurrAddresses->Next;
     }
 
+	j["system"]["network"]["inBytes"] = maxDL;
+	j["system"]["network"]["outBytes"] = maxDLUpload;
+	j["system"]["network"]["inErrors"] = maxDLInErrors;
+	j["system"]["network"]["outErrors"] = maxDLOutErrors;
+	j["system"]["network"]["inDiscards"] = maxDLInDiscards;
+	j["system"]["network"]["outDiscards"] = maxDLOutDiscards;
+
     FREE(pAddresses);
 }
 
-void sys_disk(std::string& out) {
+void sys_disk(json& j) {
     HANDLE dev = CreateFile("\\\\.\\C:", 
         FILE_READ_ATTRIBUTES, 
         FILE_SHARE_READ | FILE_SHARE_WRITE, 
@@ -523,8 +527,8 @@ void sys_disk(std::string& out) {
         return;
     }
 
-    out = out + "__framed_sys_disk-c: read: " + std::to_string(disk_info.BytesRead.QuadPart) + "\n";
-    out = out + "__framed_sys_disk-c: write: " + std::to_string(disk_info.BytesWritten.QuadPart) + "\n";
+	j["system"]["disk"]["read"] = disk_info.BytesRead.QuadPart;
+	j["system"]["disk"]["write"] = disk_info.BytesWritten.QuadPart;
 }
 
 uint64_t getEpochTime() {
@@ -700,14 +704,14 @@ int sys_cpu_init() {
 	return 1;
 }
 
-void sys_cpu(std::string& out) {
+void sys_cpu(json& j) {
 	sysCPUTimes cpuTimes2;
 	FILETIME idleTime;
 	FILETIME kernelTime;
 	FILETIME userTime;
 
 	if (!GetSystemTimes(&idleTime, &kernelTime, &userTime)) {
-		out = out + "__framed_sys_cpu: cpu: 0\n";
+		j["system"]["cpu"]["percentage"] = 0;
 		return;
 	}
 
@@ -720,24 +724,11 @@ void sys_cpu(std::string& out) {
 	double userTimeD = cpuTimes2.userTime - cpuTimes1.userTime;
 	double systemTimeD = cpuTimes2.systemTime - cpuTimes1.systemTime;
 
-	//double cpuT = static_cast<double>(100 / ((userTimeD + systemTimeD) / (cpuTimes2.time - cpuTimes1.time)));
 	double cpuT = static_cast<double>((systemTimeD + userTimeD - idleTimeD) * 100 / (systemTimeD + userTimeD));
-	// Due to limitations of the parser, this needs to be an integer
-	int cpu = ceil(cpuT * 100.0);
+	// Round CPU usage to 2 decimal places
+	double cpu = ceil(cpuT * 100.0) / 100;
 
-	//std::cout << "_framed_sys_cpu: ut1: " << std::to_string(cpuTimes1.userTime) << "\n";
-	//std::cout << "_framed_sys_cpu: ut2: " << std::to_string(cpuTimes2.userTime) << "\n";
-	//std::cout << "_framed_sys_cpu: tt1: " << cpuTimes1.time << "\n";
-	//std::cout << "_framed_sys_cpu: st1: " << std::to_string(cpuTimes1.systemTime) << "\n";
-	//std::cout << "_framed_sys_cpu: st2: " << std::to_string(cpuTimes2.systemTime) << "\n";
-	//std::cout << "_framed_sys_cpu: tt2: " << cpuTimes2.time << "\n";
-	//std::cout << "_framed_sys_cpu: utd: " << userTimeD << "\n";
-	//std::cout << "_framed_sys_cpu: std: " << systemTimeD << "\n";
-
-	//std::cout << "_framed_sys_cpu: add: " << (userTimeD + systemTimeD) << "\n";
-	//std::cout << "_framed_sys_cpu: time: " << (cpuTimes2.time - cpuTimes1.time) << "\n";
-
-	out = out + "__framed_sys_cpu: cpu: " + std::to_string(cpu) + "\n";
+	j["system"]["cpu"]["percentage"] = cpu;
 }
 
 BOOL IsElevated( ) {
@@ -759,13 +750,42 @@ BOOL IsElevated( ) {
 void FramedGetPerfData(const v8::FunctionCallbackInfo<v8::Value>& args) {
 	v8::Isolate* isolate = args.GetIsolate();
 
+	json j = {
+		{"system", {
+			{"memory", {
+				{"memTotal", 0},
+				{"memUsed", 0}
+			}},
+			{"network", {
+				{"inBytes", 0},
+				{"outBytes", 0},
+				{"inErrors", 0},
+				{"outErrors", 0},
+				{"inDiscards", 0},
+				{"outDiscards", 0}
+			}},
+			{"disk", {
+				{"read", 0},
+				{"write", 0}
+			}},
+			{"cpu", {
+				{"percentage", 0}
+			}}
+		}},
+		// _processes is used internally, programs is returned
+		// for future update
+		{"programs", {}},
+		{"_processes", {}},
+		{"apiCompleteTime", 0}
+	};
+
 	std::string outputString = "";
 
 	bool cpuInit = sys_cpu_init();
 
-	sys_mem(outputString);
-	psutil_net_io_counters(outputString);
-	sys_disk(outputString);
+	sys_mem(j);
+	psutil_net_io_counters(j);
+	sys_disk(j);
 
 	if (cpuInit) {
 		// By initializing above, we can run other things and
@@ -781,9 +801,9 @@ void FramedGetPerfData(const v8::FunctionCallbackInfo<v8::Value>& args) {
 		}
 
 		// CPU calculation is still kinda buggy though
-		sys_cpu(outputString);
+		sys_cpu(j);
 	} else {
-		outputString = outputString + "__framed_sys_cpu: cpu: 0\n";
+		j["system"]["cpu"]["percentage"] = 0;
 	}
 
 	// Until I can find a solution to the high CPU usage, comment this out
@@ -808,7 +828,9 @@ void FramedGetPerfData(const v8::FunctionCallbackInfo<v8::Value>& args) {
 		processes = NULL;
 	}*/
 
-	v8::Local<v8::String> output = v8::String::NewFromUtf8(isolate, outputString.c_str()).ToLocalChecked();
+	v8::Local<v8::Value> output = v8::JSON::Parse(isolate->GetCurrentContext(),
+		v8::String::NewFromUtf8(isolate, j.dump().c_str()).ToLocalChecked())
+		.ToLocalChecked();
 	args.GetReturnValue().Set(output);
 }
 

@@ -51,6 +51,9 @@ contextBridge.exposeInMainWorld('framed', {
 	openTwitter: () => {
 		ipcRenderer.send('open-twitter');
 	},
+	openDiscord: () => {
+		ipcRenderer.send('open-discord');
+	},
 	openDocs: () => {
 		ipcRenderer.send('open-docs');
 	}

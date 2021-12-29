@@ -144,6 +144,10 @@ document.getElementById('twitterBtn').addEventListener('click', () => {
 	window.framed.openTwitter();
 });
 
+document.getElementById('discordBtn').addEventListener('click', () => {
+	window.framed.openDiscord();
+});
+
 document.getElementById('helpBtn').addEventListener('click', () => {
 	window.framed.openDocs();
 });

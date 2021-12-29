@@ -59,7 +59,7 @@ function run() {
 	prevFinished = false;
 
 	var t1 = Date.now();
-	var jsonOutput = {
+	/*var jsonOutput = {
 		system: {
 			memory: {
 				memTotal: 0,
@@ -85,7 +85,7 @@ function run() {
 		programs: {},
 		_processes: {},
 		apiCompleteTime: 0
-	};
+	};*/
 
 	//var _cppPath = _isProd ? path.join(path.parse(_path).dir, 'resources') : __dirname;
 	//var child = spawn(path.join(_cppPath, 'framed-cpp-api.exe'));
@@ -117,106 +117,90 @@ function run() {
 				return;
 			}*/
 		var t2 = Date.now();
-		jsonOutput.apiCompleteTime = t2 - t1;
+		cmdOutput.apiCompleteTime = t2 - t1;
+
 		//console.log(cmdOutput);
+
 		// Framed C++ API returns the following:
 		// * = counter
-		// __framed_sys_mem contains:
+		// system.memory contains:
 		//   + memTotal
 		//   + memUsed
-		// __framed_sys_net-[0-9]+ contains:
+		// system.network contains:
 		//   + inBytes*
 		//   + outBytes*
 		//   + inErrors*
 		//   + outErrors*
 		//   + inDiscards*
 		//   + outDiscards*
-		// __framed_sys_disk-c contains:
+		// system.disk contains:
 		//   + read*
 		//   + write*
-		// __framed_sys_cpu contains:
-		//   + cpu
+		// system.cpu contains:
+		//   + percentage
 		// All others contain:
 		//   + mem
 		//   + ioRead*
 		//   + ioWrite*
 
-		var cmdOutputLines = cmdOutput.split('\n');
+		// If previous run(s) missed, divide by missed runs + 1 to get average
+		cmdOutput.system.network.inBytes = (cmdOutput.system.network.inBytes - prevCounters.system.network.inBytes) / (missedRunsSinceLastSuccess + 1);
+		prevCounters.system.network.inBytes += cmdOutput.system.network.inBytes;
 
-		for (var i = 0; i < cmdOutputLines.length; i++) {
-			if (cmdOutputLines[i] === '') continue;
-			let line = parseLine(cmdOutputLines[i]);
-			if (!line) {
-				continue;
-			}
-			if (line.name.startsWith('__framed_sys_cpu')) {
-				jsonOutput.system.cpu.percentage = line.value / 100;
-			} else if (line.name.startsWith('__framed_sys_mem')) {
-				if (Object.prototype.hasOwnProperty.call(jsonOutput.system.memory, line.key)) {
-					jsonOutput.system.memory[line.key] = line.value;
+		// If previous run(s) missed, divide by missed runs + 1 to get average
+		cmdOutput.system.network.outBytes = (cmdOutput.system.network.outBytes - prevCounters.system.network.outBytes) / (missedRunsSinceLastSuccess + 1);
+		prevCounters.system.network.outBytes += cmdOutput.system.network.outBytes;
 
-				}
-			} else if (line.name.startsWith('__framed_sys_net')) {
-				switch (line.key) {
-					case 'inBytes':
-						// If previous run(s) missed, divide by missed runs + 1 to get average
-						jsonOutput.system.network.inBytes = (line.value - prevCounters.system.network.inBytes) / (missedRunsSinceLastSuccess + 1);
-						prevCounters.system.network.inBytes = line.value;
-						break;
-					case 'outBytes':
-						// If previous run(s) missed, divide by missed runs + 1 to get average
-						jsonOutput.system.network.outBytes = (line.value - prevCounters.system.network.outBytes) / (missedRunsSinceLastSuccess + 1);
-						prevCounters.system.network.outBytes = line.value;
-						break;
-					default:
-						if (firstRun) {
-							if (Object.prototype.hasOwnProperty.call(prevCounters.system.network, line.key)) {
-								// Display only the network errors and discards since Framed was opened
-								prevCounters.system.network[line.key] = line.value;
-							}
-						}
-						if (Object.prototype.hasOwnProperty.call(jsonOutput.system.network, line.key) && Object.prototype.hasOwnProperty.call(prevCounters.system.network, line.key)) {
-							jsonOutput.system.network[line.key] = line.value - prevCounters.system.network[line.key];
-						}
-				}
-			} else if (line.name.startsWith('__framed_sys_disk-c')) {
-				if (Object.prototype.hasOwnProperty.call(jsonOutput.system.disk, line.key)) {
-					// If previous run(s) missed, divide by missed runs + 1 to get average
-					jsonOutput.system.disk[line.key] = (line.value - prevCounters.system.disk[line.key]) / (missedRunsSinceLastSuccess + 1);
-					prevCounters.system.disk[line.key] = line.value;
-				}
-			} else {
-				if (!Object.prototype.hasOwnProperty.call(prevCounters.processes, line.name)) {
-					prevCounters.processes[line.name] = {
-						ioRead: 0,
-						ioWrite: 0
-					};
-				}
+		if (firstRun) {
+			prevCounters.system.network.inErrors = cmdOutput.system.network.inErrors;
+			prevCounters.system.network.outErrors = cmdOutput.system.network.outErrors;
+			prevCounters.system.network.inDiscards = cmdOutput.system.network.inDiscards;
+			prevCounters.system.network.outDiscards = cmdOutput.system.network.outDiscards;
+		}
 
-				if (!Object.prototype.hasOwnProperty.call(jsonOutput._processes, line.name)) {
-					jsonOutput._processes[line.name] = {
-						mem: 0,
-						ioRead: 0,
-						ioWrite: 0
-					};
-				}
+		cmdOutput.system.network.inErrors -= prevCounters.system.network.inErrors;
+		cmdOutput.system.network.outErrors -= prevCounters.system.network.outErrors;
+		cmdOutput.system.network.inDiscards -= prevCounters.system.network.inDiscards;
+		cmdOutput.system.network.outDiscards -= prevCounters.system.network.outDiscards;
 
-				switch (line.key) {
-					case 'mem':
-						jsonOutput._processes[line.name].mem = line.value;
-						break;
-					case 'ioRead':
-						// If previous run(s) missed, divide by missed runs + 1 to get average
-						jsonOutput._processes[line.name].ioRead = (line.value - prevCounters.processes[line.name].ioRead) / (missedRunsSinceLastSuccess + 1);
-						prevCounters.processes[line.name].ioRead = line.value;
-						break;
-					case 'ioWrite':
-						// If previous run(s) missed, divide by missed runs + 1 to get average
-						jsonOutput._processes[line.name].ioWrite = (line.value - prevCounters.processes[line.name].ioWrite) / (missedRunsSinceLastSuccess + 1);
-						prevCounters.processes[line.name].ioWrite = line.value;
-						break;
-				}
-			}
+		// If previous run(s) missed, divide by missed runs + 1 to get average
+		cmdOutput.system.disk.read = (cmdOutput.system.disk.read - prevCounters.system.disk.read) / (missedRunsSinceLastSuccess + 1);
+		prevCounters.system.disk.read += cmdOutput.system.disk.read;
+
+		cmdOutput.system.disk.write = (cmdOutput.system.disk.write - prevCounters.system.disk.write) / (missedRunsSinceLastSuccess + 1);
+		prevCounters.system.disk.write += cmdOutput.system.disk.write;
+
+		// Keeping the process code here for future reference
+
+		/*if (!Object.prototype.hasOwnProperty.call(prevCounters.processes, line.name)) {
+			prevCounters.processes[line.name] = {
+				ioRead: 0,
+				ioWrite: 0
+			};
+		}
+
+		if (!Object.prototype.hasOwnProperty.call(jsonOutput._processes, line.name)) {
+			jsonOutput._processes[line.name] = {
+				mem: 0,
+				ioRead: 0,
+				ioWrite: 0
+			};
+		}
+
+		switch (line.key) {
+			case 'mem':
+				jsonOutput._processes[line.name].mem = line.value;
+				break;
+			case 'ioRead':
+				// If previous run(s) missed, divide by missed runs + 1 to get average
+				jsonOutput._processes[line.name].ioRead = (line.value - prevCounters.processes[line.name].ioRead) / (missedRunsSinceLastSuccess + 1);
+				prevCounters.processes[line.name].ioRead = line.value;
+				break;
+			case 'ioWrite':
+				// If previous run(s) missed, divide by missed runs + 1 to get average
+				jsonOutput._processes[line.name].ioWrite = (line.value - prevCounters.processes[line.name].ioWrite) / (missedRunsSinceLastSuccess + 1);
+				prevCounters.processes[line.name].ioWrite = line.value;
+				break;
 		}
 
 		for (var process in jsonOutput._processes) {
@@ -241,15 +225,15 @@ function run() {
 			if (!Object.prototype.hasOwnProperty.call(jsonOutput._processes, oldProcesses)) {
 				delete prevCounters.processes[oldProcesses];
 			}
-		}
+		}*/
 
-		delete jsonOutput._processes;
+		delete cmdOutput._processes;
 
 		missedRunsSinceLastSuccess = 0;
 		prevFinished = true;
 
 		if (!firstRun) {
-			_eventEmitter.emit('cppData', jsonOutput);
+			_eventEmitter.emit('cppData', cmdOutput);
 		}
 
 		//console.log(jsonOutput);

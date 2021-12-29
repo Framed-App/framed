@@ -482,6 +482,10 @@ function start() {
 			shell.openExternal('https://twitter.com/TheFramedApp');
 		});
 
+		ipcMain.on('open-discord', () => {
+			shell.openExternal('https://framed-app.com/discord');
+		});
+
 		ipcMain.on('open-docs', () => {
 			shell.openExternal(`https://framed-app.com/docs/v${app.getVersion()}`);
 		});
@@ -617,6 +621,8 @@ function init(eventEmitter, prod, log) {
 			}
 		});
 	}
+
+	log.info(`Started Framed v${app.getVersion()}`);
 
 	if (store.get('disableHardwareAcceleration')) {
 		log.info('Disabling hardware acceleration');
