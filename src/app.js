@@ -571,7 +571,11 @@ function start() {
 							win.webContents.send('info', `Update available. Version ${response.data.message.replace(/^v/, '')} has been released.`);
 							break;
 						case 'beta':
-							win.webContents.send('info', `Beta update available. Version ${response.data.message.replace(/^v/, '')} has been released. Note: using beta versions is discouraged.`);
+							if (response.data.betaHasNewerStable) {
+								win.webContents.send('info', `Stable version ${response.data.message.replace(/^v/, '')} has been released. You should update to this version instead of using a beta version.`);
+							} else {
+								win.webContents.send('info', `Beta update available. Version ${response.data.message.replace(/^v/, '')} has been released. Note: using beta versions is discouraged.`);
+							}
 							break;
 					}
 				}
