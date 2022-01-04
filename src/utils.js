@@ -1,6 +1,7 @@
 const tcpp = require('tcp-ping');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 //const collectData = require('./collect-data.js');
 
 function createJRPCMessage(method, params, id) {
@@ -236,6 +237,28 @@ function validateFileData(data) {
 	return require(`./frd-validator/v${version}.js`).validate(data.data);
 }
 
+function createKeyPair(installId, cb) {
+	crypto.generateKeyPair('rsa', {
+		modulusLength: 2048,
+		publicKeyEncoding: {
+			type: 'spki',
+			format: 'pem'
+		},
+		privateKeyEncoding: {
+			type: 'pkcs8',
+			format: 'pem',
+			cipher: 'aes-256-cbc',
+			passphrase: installId
+		}
+	}, (err, publicKey, privateKey) => {
+		cb(err, publicKey, privateKey);
+	});
+}
+
+function generateSecureRandomString(length) {
+	return crypto.randomBytes(Math.ceil(length)).toString('base64').slice(0, length);
+}
+
 module.exports.createJRPCMessage = createJRPCMessage;
 module.exports.tcpPing = tcpPing;
 module.exports.convertBytes = convertBytes;
@@ -245,3 +268,5 @@ module.exports.parseCity = parseCity;
 module.exports.parseHost = parseHost;
 module.exports.getRandomTwitchServers = getRandomTwitchServers;
 module.exports.validateFileData = validateFileData;
+module.exports.createKeyPair = createKeyPair;
+module.exports.generateSecureRandomString = generateSecureRandomString;

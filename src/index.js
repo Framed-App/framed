@@ -9,6 +9,8 @@ const OBSSupport = require('./software-support/OBSSupport.js');
 
 log.transports.console.format = '{y}-{m}-{d} {h}:{i}:{s}.{ms} [{level}] > {text}';
 log.transports.file.format = '{y}-{m}-{d} {h}:{i}:{s}.{ms} [{level}] > {text}';
+// 50KB
+log.transports.file.maxSize = 51200;
 
 var _servers = [];
 var _userContinent;

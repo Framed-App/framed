@@ -4,8 +4,45 @@ const path = require('path');
 const fs = require('fs');
 const moment = require('moment');
 const isIp = require('is-ip');
+const uuid = require('uuid');
 const Store = require('electron-store');
+const dgram = require('dgram');
+const os = require('os');
+const Broadcast = require('./protocol/messages/Broadcast.js');
+const Server = require('./protocol/Server.js');
 const utils = require('./utils.js');
+const interfaces = os.networkInterfaces();
+
+/** @type {Server} */
+var server;
+
+function hexToBase64(hex) {
+	hex = hex.toString().toLowerCase().replace(/[^0-9a-f]/g, '');
+	return Buffer.from(hex, 'hex').toString('base64')
+		.replace(/\+/g, '-')
+		.replace(/\//g, '_')
+		.replace(/=/g, '');
+}
+
+// The encryption isn't for security purposes.
+// (Anyone can view the source code and get the `keys.enc.json` key).
+// Instead, it is to prevent a user from modifying the config file directly,
+// which could break certain parts of the app
+const encStore = new Store({
+	schema: {
+		configKey: {
+			type: 'string'
+		}
+	},
+	name: 'keys',
+	fileExtension: 'enc.json',
+	encryptionKey: 'framedkeysfile',
+	clearInvalidConfig: true
+});
+
+if (!encStore.get('configKey')) {
+	encStore.set('configKey', `${hexToBase64(uuid.v4())}.${hexToBase64(uuid.v4())}`);
+}
 
 const store = new Store({
 	schema: {
@@ -30,9 +67,45 @@ const store = new Store({
 		disableHardwareAcceleration: {
 			type: 'boolean',
 			default: false
+		},
+		mobileAppEnabled: {
+			type: 'boolean',
+			default: true
+		},
+		mobileAppPort: {
+			type: 'number',
+			minimum: 1000,
+			maximum: 65535,
+			default: 18500
+		},
+		mobileAppPassword: {
+			type: 'string'
+		},
+		installationId: {
+			type: 'string'
+		},
+		publicKey: {
+			type: 'string'
+		},
+		privateKey: {
+			type: 'string'
 		}
-	}
+	},
+	fileExtension: 'enc.json',
+	encryptionKey: encStore.get('configKey'),
+	clearInvalidConfig: true
 });
+
+// explicitly set this in the store so it can be saved to the
+// config file on firts run and doesn't change every time
+if (!store.get('mobileAppPassword')) {
+	// 22 characters seemed a bit short
+	store.set('mobileAppPassword', `${hexToBase64(uuid.v4())}.${hexToBase64(uuid.v4())}`);
+}
+
+if (!store.get('installationId')) {
+	store.set('installationId', `${hexToBase64(uuid.v4())}`);
+}
 
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -45,6 +118,7 @@ var _diagData = {};
 var _viewFRDWindows = {};
 var _viewFRDDiagWindows = {};
 var _viewFRDData = {};
+var _latestCPPData = {};
 var _savesDirExists = false;
 var _prod = false;
 var _log = null;
@@ -497,6 +571,7 @@ function start() {
 
 		_eventEmitter.on('cppData', (data) => {
 			if (!win) return;
+			_latestCPPData = data;
 			win.webContents.send('cppData', data);
 		});
 
@@ -626,7 +701,7 @@ function init(eventEmitter, prod, log) {
 		});
 	}
 
-	log.info(`Started Framed v${app.getVersion()}`);
+	log.info(`Started Framed v${app.getVersion()}. Install ID: ${store.get('installationId')}`);
 
 	if (store.get('disableHardwareAcceleration')) {
 		log.info('Disabling hardware acceleration');
@@ -636,6 +711,69 @@ function init(eventEmitter, prod, log) {
 	_eventEmitter = eventEmitter;
 	_prod = prod;
 	_log = log;
+
+	if (store.get('mobileAppEnabled')) {
+		if (!store.get('publicKey')) {
+			utils.createKeyPair(store.get('installationId'), (err, publicKey, privateKey) => {
+				if (err) {
+					_log.info(`Failed to generate keypair: ${err}`);
+				}
+
+				store.set('publicKey', Buffer.from(publicKey.replace(/\n/g, '\\n')).toString('base64'));
+				store.set('privateKey', Buffer.from(privateKey.replace(/\n/g, '\\n')).toString('base64'));
+			});
+		}
+
+		server = new Server(
+			store.get('installationId'),
+			store.get('mobileAppPassword'),
+			store.get('mobileAppPort'),
+			store.get('privateKey'),
+			_log
+		);
+
+		server.getEventEmitter().on('srvGetPerfData', (con) => {
+			server.getEventEmitter().emit('srvPerfData', _latestCPPData, con);
+		});
+
+		var _multicastPort = 19555;
+		var _multicastAddr = '228.182.166.121';
+		var _multicastServers = {};
+		for (var i in interfaces) {
+			for (var j = 0; j < interfaces[i].length; j++) {
+				let _int = interfaces[i][j];
+				// IPv6 support will be added in the future
+				if (_int.family !== 'IPv4') continue;
+				if (_int.address.startsWith('127.')) continue;
+
+				log.info(`Adding multicast membership to ${_int.address}`);
+
+				_multicastServers[_int.address] = dgram.createSocket('udp4');
+				_multicastServers[_int.address].bind(_multicastPort, () => {
+					_multicastServers[_int.address].addMembership(_multicastAddr, _int.address);
+
+					setInterval(() => {
+						var msg = new Broadcast(
+							store.get('installationId'),
+							{
+								ip: _int.address,
+								port: store.get('mobileAppPort'),
+								hostname: os.hostname(),
+								version: app.getVersion(),
+								publicKey: store.get('publicKey')
+							}
+						).getPacketData();
+
+						_multicastServers[_int.address].send(msg, 0, msg.length, _multicastPort, _multicastAddr, (err) => {
+							if (err) {
+								console.error(err);
+							}
+						});
+					}, 1000);
+				});
+			}
+		}
+	}
 
 	ensureExists(path.join(app.getPath('userData'), 'saves'), function(err) {
 		if (err) {
