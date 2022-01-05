@@ -79,10 +79,6 @@ class Server {
 	_handleData(data, con) {
 		data = data.toString().trim();
 
-		if (data === 'bye') {
-			con.end('goodbye\n');
-		}
-
 		if (!this._isValidPacket(data, con)) return;
 
 		var p = this.getPacketParts(data);

@@ -77,5 +77,3 @@ After connecting to a server, the client sends a `KeyExchange` packet. This cont
 The `KeyExchange` packet must be sent before any more messages are sent. If the server does not have a key for a connection, it will reject messages.
 
 If no data is exchanged within 10 seconds, the connection is closed by the client. The server forcefully closes the connection after 10.25 seconds of inactivity.
-
-For convenience while testing (using `telnet` or similar), the server also supports a single packet that does not follow the above conventions. Sending the message `bye` will result in the server sending a `goodbye` message back, and closing the connection.
