@@ -1,7 +1,7 @@
 const SoftwareSupport = require('./SoftwareSupport.js');
 const OBSWebSocket = require('obs-websocket-js');
 
-const GET_PERFORMANCE_INTERVAL = 15 * 1000;
+const GET_PERFORMANCE_INTERVAL = 4 * 1000;
 
 class OBSSupport extends SoftwareSupport {
 	constructor(_config, _eventEmitter, _log) {

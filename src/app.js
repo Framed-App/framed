@@ -736,6 +736,21 @@ function init(eventEmitter, prod, log) {
 			server.getEventEmitter().emit('srvPerfData', _latestCPPData, con);
 		});
 
+		server.getEventEmitter().on('srvGetDiagData', (lastTimestamp, con) => {
+			var _d = Object.assign({}, _diagData);
+
+			var toSendBack = Object.keys(_d).filter(e => e > lastTimestamp);
+
+			if (toSendBack.length === 0) return;
+
+			var sendData = {};
+			for (var i = 0; i < toSendBack.length; i++) {
+				sendData[toSendBack[i]] = _d[toSendBack[i]];
+			}
+
+			server.getEventEmitter().emit('srvDiagData', sendData, con);
+		});
+
 		var _multicastPort = 19555;
 		var _multicastAddr = '228.182.166.121';
 		var _multicastServers = {};

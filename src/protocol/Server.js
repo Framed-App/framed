@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const protoConfig = require('./proto.config.js');
 const utils = require('../utils.js');
 const PerfData = require('./messages/PerfData.js');
+const DiagData = require('./messages/DiagData.js');
 
 class Server {
 	constructor(installId, password, port, privateKey, log) {
@@ -24,6 +25,7 @@ class Server {
 		});
 
 		this._eventEmitter.on('srvPerfData', (...args) => this._handlePerfData(...args));
+		this._eventEmitter.on('srvDiagData', (...args) => this._handleDiagData(...args));
 	}
 
 	getPacketParts(packet) {
@@ -101,6 +103,9 @@ class Server {
 				case 'GetPerfData':
 					this._eventEmitter.emit('srvGetPerfData', con);
 					break;
+				case 'GetDiagData':
+					this._eventEmitter.emit('srvGetDiagData', decrypted.lastTimestamp, con);
+					break;
 			}
 		}
 	}
@@ -109,6 +114,12 @@ class Server {
 		var perfData = new PerfData(this.installId, data);
 		perfData.enableEncryption(this._keys[`${con.remoteAddress}:${con.remotePort}`], utils.generateSecureRandomString(16));
 		con.write(`${perfData.getPacketData()}\n`);
+	}
+
+	_handleDiagData(data, con) {
+		var diagData = new DiagData(this.installId, data);
+		diagData.enableEncryption(this._keys[`${con.remoteAddress}:${con.remotePort}`], utils.generateSecureRandomString(16));
+		con.write(`${diagData.getPacketData()}\n`);
 	}
 
 	_decryptRsaJson(encrypted) {

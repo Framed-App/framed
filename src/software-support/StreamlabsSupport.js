@@ -2,7 +2,7 @@ const SoftwareSupport = require('./SoftwareSupport.js');
 const SockJS = require('sockjs-client');
 const utils = require('../utils.js');
 
-const GET_PERFORMANCE_INTERVAL = 15 * 1000;
+const GET_PERFORMANCE_INTERVAL = 4 * 1000;
 
 class StreamlabsSupport extends SoftwareSupport {
 	constructor(_config, _eventEmitter, _log) {
