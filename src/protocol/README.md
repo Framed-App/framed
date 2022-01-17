@@ -32,7 +32,7 @@ The JSON contains the following:
 
 *The following modifications are done: the string is uppercased, `+` is replaced with `X`, `/` is replaced with `Z`, and vowels (`A, E, I, O, U, Y`) are replaced with the next alphabet character.
 
-**Note**: The order of the JSON object is important for the signatures to match. Therefore a custom JSON object is used on both the server and the client. The `@truewinter/orderedjson` package is used to achieve this. Clients should remove `publicKey` and `sig` without causing invalid JSON or changing the order of the JSON object as this would invalidate the signature. The Java app uses the following regex to achieve this: `,?"***":"[a-zA-Z0-9=_\-+\/]+"`, where `***` is the key to remove.
+**Note**: The order of the JSON object is important for the signatures to match. The `@truewinter/orderedjson` package is used to achieve this. Clients should remove `publicKey` and `sig` without causing invalid JSON or changing the order of the JSON object as this would invalidate the signature. The Java app uses the following regex to achieve this: `,?"***":"[a-zA-Z0-9=_\-+\/]+"`, where `***` is the key to remove.
 
 ## Unicast Packets
 
