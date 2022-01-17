@@ -6,8 +6,11 @@ const moment = require('moment');
 const isIp = require('is-ip');
 const uuid = require('uuid');
 const Store = require('electron-store');
+const QRCode = require('qrcode');
 const dgram = require('dgram');
 const os = require('os');
+const crypto = require('crypto');
+const events = require('events');
 const Broadcast = require('./protocol/messages/Broadcast.js');
 const Server = require('./protocol/Server.js');
 const utils = require('./utils.js');
@@ -89,6 +92,9 @@ const store = new Store({
 		},
 		privateKey: {
 			type: 'string'
+		},
+		publicKeyFingerprint: {
+			type: 'string'
 		}
 	},
 	fileExtension: 'enc.json',
@@ -112,6 +118,7 @@ const gotTheLock = app.requestSingleInstanceLock();
 let win = null;
 var _eventEmitter = null;
 var _aboutModal = null;
+var _licenseModal = null;
 var _settingsModal = null;
 var _diagModals = {};
 var _diagData = {};
@@ -332,11 +339,37 @@ function start() {
 			_aboutModal.show();
 		});
 
-		_aboutModal.webContents.on('will-navigate', (e, url) => {
-			var _allowedDomains = ['github.com'];
-			var _url = new URL(url);
+		var aboutData = {};
+		try {
+			aboutData = JSON.parse(
+				fs.readFileSync(path.join(__dirname, path.normalize('ui/js/renderer/additional/about/about.config.js')))
+					.toString()
+					.replace('const aboutData = ', '')
+					.replace(/;$/, '')
+			);
+		} catch (e) {
+			_log.error(`About data file invalid: ${e}`);
+		}
 
+		var _allowedDomains = [];
+
+		for (var a in aboutData) {
+			if (!aboutData[a].link) continue;
+
+			try {
+				var _u = new URL(aboutData[a].link);
+				if (!_allowedDomains.includes(_u.host)) {
+					_allowedDomains.push(_u.host);
+				}
+			} catch (e) {
+				console.log(`Invalid link: ${e}`);
+			}
+		}
+
+		_aboutModal.webContents.on('will-navigate', (e, url) => {
 			e.preventDefault();
+
+			var _url = new URL(url);
 
 			if (_allowedDomains.includes(_url.host)) {
 				shell.openExternal(url);
@@ -345,6 +378,37 @@ function start() {
 
 		_aboutModal.on('closed', () => {
 			_aboutModal = null;
+		});
+	}
+
+	function createLicensesModal() {
+		if (_licenseModal !== null) {
+			return _licenseModal.focus();
+		}
+
+		_licenseModal = new BrowserWindow({
+			width: 600,
+			height: 400,
+			parent: win,
+			modal: true,
+			show: false,
+			webPreferences: {
+				preload: path.join(__dirname, 'ui', 'js', 'preload', 'licenses.js'),
+				contextIsolation: true
+			},
+			backgroundColor: '#24242c',
+			icon: path.join(__dirname, 'img', 'icon.ico')
+		});
+
+		_licenseModal.loadFile(path.join(__dirname, 'ui', 'licenses.html'));
+		_licenseModal.removeMenu();
+
+		_licenseModal.on('ready-to-show', () => {
+			_licenseModal.show();
+		});
+
+		_licenseModal.on('closed', () => {
+			_licenseModal = null;
 		});
 	}
 
@@ -478,6 +542,24 @@ function start() {
 
 			for (var f in _viewFRDWindows) {
 				_viewFRDWindows[f].webContents.send('version', app.getVersion());
+			}
+		});
+
+		ipcMain.on('showLicenseModal', () => {
+			createLicensesModal();
+		});
+
+		ipcMain.on('get-fingerprint', () => {
+			if (_settingsModal !== null) {
+				var fingerprint = store.get('publicKeyFingerprint');
+				QRCode.toDataURL(fingerprint, function(err, url) {
+					if (err) return _log.error(`Failed get QR code URL: ${err}`);
+
+					_settingsModal.webContents.send('fingerprint', {
+						qrcode: url,
+						fingerprint
+					});
+				});
 			}
 		});
 
@@ -617,6 +699,10 @@ function start() {
 				_aboutModal.close();
 			}
 
+			if (_licenseModal !== null) {
+				_licenseModal.close();
+			}
+
 			if (_settingsModal !== null) {
 				_settingsModal.close();
 			}
@@ -712,8 +798,13 @@ function init(eventEmitter, prod, log) {
 	_prod = prod;
 	_log = log;
 
+	var _waitForEvent = false;
+	var _keygenEvent = new events.EventEmitter();
+	_keygenEvent.on('done', startServer);
+
 	if (store.get('mobileAppEnabled')) {
 		if (!store.get('publicKey')) {
+			_waitForEvent = true;
 			utils.createKeyPair(store.get('installationId'), (err, publicKey, privateKey) => {
 				if (err) {
 					_log.info(`Failed to generate keypair: ${err}`);
@@ -721,9 +812,14 @@ function init(eventEmitter, prod, log) {
 
 				store.set('publicKey', Buffer.from(publicKey.replace(/\n/g, '\\n')).toString('base64'));
 				store.set('privateKey', Buffer.from(privateKey.replace(/\n/g, '\\n')).toString('base64'));
+				_keygenEvent.emit('done');
 			});
 		}
 
+		if (!_waitForEvent) _keygenEvent.emit('done');
+	}
+
+	function startServer() {
 		server = new Server(
 			store.get('installationId'),
 			store.get('mobileAppPassword'),
@@ -731,6 +827,37 @@ function init(eventEmitter, prod, log) {
 			store.get('privateKey'),
 			_log
 		);
+
+		if (!store.get('publicKeyFingerprint')) {
+			var fingerprint = rotateVowels(crypto.createHash('sha256')
+				.update(Buffer.from(store.get('publicKey'), 'base64').toString().replace(/\\n/g, '\n'))
+				.digest('base64').replace(/\+/g, 'X').replace(/\//g, 'Z')
+				.toUpperCase().substring(0, 6));
+
+			store.set('publicKeyFingerprint', fingerprint);
+		}
+
+		// This function is to replace the vowels to prevent
+		// any bad words being produced by the fingerprint function
+		// eslint-disable-next-line no-inner-declarations
+		function rotateVowels(string) {
+			var ROTATE = 1;
+			var CHARS = ['A', 'E', 'I', 'O', 'U', 'Y'];
+			var stringArr = string.split('');
+			var out = '';
+
+			for (var i = 0; i < stringArr.length; i++) {
+				if (CHARS.includes(stringArr[i])) {
+					out += String.fromCharCode(stringArr[i].charCodeAt() + ROTATE);
+				} else {
+					out += stringArr[i];
+				}
+			}
+
+			return out;
+		}
+
+		_log.info(`Public key fingerprint: ${store.get('publicKeyFingerprint')}`);
 
 		server.getEventEmitter().on('srvGetPerfData', (con) => {
 			server.getEventEmitter().emit('srvPerfData', _latestCPPData, con);
@@ -775,7 +902,8 @@ function init(eventEmitter, prod, log) {
 								port: store.get('mobileAppPort'),
 								hostname: os.hostname(),
 								version: app.getVersion(),
-								publicKey: store.get('publicKey')
+								publicKey: store.get('publicKey'),
+								_privateKey: store.get('privateKey')
 							}
 						).getPacketData();
 

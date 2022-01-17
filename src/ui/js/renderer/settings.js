@@ -19,6 +19,15 @@ window.framed.receiveSettings((settings) => {
 	updateSettingDisplay(settings.streamingSoftware, true);
 });
 
+window.framed.getFingerprint();
+window.framed.receiveFingerprint((data) => {
+	var img = document.createElement('img');
+	img.src = data.qrcode;
+
+	document.getElementById('fingerprintQR').appendChild(img);
+	document.getElementById('fingerprintCode').innerText = data.fingerprint;
+});
+
 function createWarnElem(message) {
 	var warnElem = document.createElement('div');
 	warnElem.dataset.type = 'portWarn';

@@ -1,3 +1,4 @@
+const OrderedJSON = require('@truewinter/orderedjson');
 const crypto = require('crypto');
 const protoConfig = require('../proto.config.js');
 
@@ -36,7 +37,13 @@ class Message {
 		if (this.key && this.iv) {
 			addToPacket(this.iv);
 			delim();
-			addToPacket(this._encryptJson(JSON.stringify(this.json)));
+			if (this.json instanceof OrderedJSON) {
+				addToPacket(this._encryptJson(this.json.getJSON()));
+			} else {
+				addToPacket(this._encryptJson(JSON.stringify(this.json)));
+			}
+		} else if (this.json instanceof OrderedJSON) {
+			addToPacket(this.json.getJSON());
 		} else {
 			addToPacket(JSON.stringify(this.json));
 		}

@@ -12,7 +12,11 @@ To contribute to Framed, you will need to configure your development environment
 - `node-gyp` v8
 - Visual Studio 2017 build tools
 
-You will need to build the native API module (`src/native-api/native-api.cpp`). Copy `json.hpp` from `nlohmann/json` v3.10.4 into `src/native-api/lib/nlohmann`. A build script has been included in that directory. If successful, you can start Framed by running `npm start`.
+You will need to build the native API module (`src/native-api/native-api.cpp`). Copy `json.hpp` from `nlohmann/json` v3.10.4 into `src/native-api/lib/nlohmann` and its license to `license.txt` in the same directory. A build script has been included in that directory.
+
+Also run `npm run create-about` to create the data for the about and licenses windows. Run this script again if you install anything from npm, it should automatically find the required data. If you add any code not from npm, please add the necessary data in `src/ui/js/renderer/additional/about/_createAbout.js`.
+
+If the above was successful, you can start Framed by running `npm start`.
 
 For security reasons, `BrowserWindow`s do not have access to the Node.js API, nor the main event emitters. Instead, the necessary event emitters (and Node.js modules, where required) are defined in the preload files (`src/ui/js/preload/`) to make them available to the `BrowserWindow`s. Ensure that the preload files give access to the minimum required to implement a feature, and that **every** event/function is separate (e.g. don't blindly pass events to the IPC, instead define every event individually).
 

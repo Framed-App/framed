@@ -1,11 +1,12 @@
 {
 	"name": "framed",
 	"productName": "Framed",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"description": "Framed allows you to find the cause of dropped frames while streaming",
 	"main": "src/index.js",
 	"scripts": {
 		"start": "electron .",
+		"create-about": "node src/ui/js/renderer/additional/about/_createAbout.js",
 		"pack": "electron-builder --dir",
 		"build": "electron-builder",
 		"test": "echo \"Error: no test specified\" && exit 1"
@@ -21,6 +22,7 @@
 	},
 	"homepage": "https://framed-app.com",
 	"dependencies": {
+		"@truewinter/orderedjson": "^0.0.1",
 		"ajv": "^8.6.3",
 		"axios": "^0.22.0",
 		"electron-log": "^4.4.1",
@@ -29,6 +31,7 @@
 		"is-ip": "^3.1.0",
 		"moment": "^2.29.1",
 		"obs-websocket-js": "^4.0.3",
+		"qrcode": "^1.5.0",
 		"sockjs-client": "^1.5.2",
 		"tcp-ping": "^0.1.1",
 		"uuid": "^8.3.2"

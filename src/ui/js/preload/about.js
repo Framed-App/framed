@@ -8,5 +8,8 @@ contextBridge.exposeInMainWorld('framed', {
 	},
 	receiveVersion: (cb) => {
 		ipcRenderer.on('version', (_, data) => cb(data));
+	},
+	showLicenseModal: () => {
+		ipcRenderer.send('showLicenseModal');
 	}
 });
