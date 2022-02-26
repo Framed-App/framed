@@ -56,6 +56,8 @@ function run() {
 		return _log.info('Previous run not yet finished');
 	}
 
+	if (!collectNativeDataProcess.connected) return;
+
 	prevFinished = false;
 
 	var t1 = Date.now();

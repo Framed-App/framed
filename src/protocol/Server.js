@@ -32,12 +32,12 @@ class Server {
 		return packet.split(protoConfig.delimiter);
 	}
 
-	_isValidPacket(packet, con) {
+	_getPacketPartsIfValid(packet, con) {
 		var parts = this.getPacketParts(packet);
-		if (parts.length !== protoConfig.msgInParts) return false;
-		if (parts[0] !== 'Framed') return false;
-		if (parts[1] !== this.installId) return false;
-		if (parts[2].length === 0) return false;
+		if (parts.length !== protoConfig.msgInParts) return null;
+		if (parts[0] !== 'Framed') return null;
+		if (parts[1] !== this.installId) return null;
+		if (parts[2].length === 0) return null;
 
 		try {
 			if (parts[2] === 'KeyExchange') {
@@ -48,10 +48,10 @@ class Server {
 			}
 		} catch (e) {
 			console.error(e);
-			return false;
+			return null;
 		}
 
-		return true;
+		return parts;
 	}
 
 	getEventEmitter() {
@@ -80,10 +80,9 @@ class Server {
 
 	_handleData(data, con) {
 		data = data.toString().trim();
+		var p = this._getPacketPartsIfValid(data, con);
 
-		if (!this._isValidPacket(data, con)) return;
-
-		var p = this.getPacketParts(data);
+		if (!p) return;
 
 		if (p[2] === 'KeyExchange') {
 			if (Object.prototype.hasOwnProperty.call(this._keys, `${con.remoteAddress}:${con.remotePort}`)) {
@@ -95,7 +94,6 @@ class Server {
 			this._keys[`${con.remoteAddress}:${con.remotePort}`] = this._decryptRsaJson(p[3]).key;
 		} else if (!Object.prototype.hasOwnProperty.call(this._keys, `${con.remoteAddress}:${con.remotePort}`)) {
 			this.log.info(`${con.remoteAddress}:${con.remotePort} tried sending data before key exchange`);
-			return;
 		} else {
 			var decrypted = this._decryptJson(p[3], this._keys[`${con.remoteAddress}:${con.remotePort}`], p[2]);
 

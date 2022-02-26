@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
+require('@sentry/electron/preload');
+const Sentry = require('@sentry/electron/renderer');
 const utils = require('../../../utils.js');
+
+Sentry.init();
 
 contextBridge.exposeInMainWorld('framed', {
 	onerror: (cb) => {
@@ -8,13 +12,19 @@ contextBridge.exposeInMainWorld('framed', {
 	oninfo: (cb) => {
 		ipcRenderer.on('info', (_, data) => cb(data));
 	},
-	// There's probably a better way to do this, but all searches
-	// return either "use remote" or "use app.getVersion()"
-	getVersion: () => {
-		ipcRenderer.send('get-version');
+	getVersion: () => require('../../../../package.json').version,
+	isProd: () => require('electron-util/node').isUsingAsar,
+	getInstallId: () => {
+		ipcRenderer.send('get-install-id');
 	},
-	receiveVersion: (cb) => {
-		ipcRenderer.on('version', (_, data) => cb(data));
+	receiveInstallId: (cb) => {
+		ipcRenderer.on('install-id', (_, data) => cb(data));
+	},
+	getIsAnalyticsEnabled: () => {
+		ipcRenderer.send('is-analytics-enabled');
+	},
+	receiveIsAnalyticsEnabled: (cb) => {
+		ipcRenderer.on('analytics-enabled', (_, data) => cb(data));
 	},
 	requestIsConnected: () => {
 		ipcRenderer.send('isConnected');

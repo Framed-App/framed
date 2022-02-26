@@ -5,6 +5,7 @@ window.framed.receiveSettings((settings) => {
 	document.getElementById('tokenInputOBS').value = settings.token;
 	document.getElementById('portInputOBS').value = settings.port;
 	document.getElementById('ipInput').value = settings.ip;
+	document.getElementById('enableAnalytics').checked = settings.isAnalyticsEnabled;
 	document.getElementById('disableHardwareAcceleration').checked = settings.disableHardwareAcceleration;
 
 	switch (settings.streamingSoftware) {
@@ -19,14 +20,15 @@ window.framed.receiveSettings((settings) => {
 	updateSettingDisplay(settings.streamingSoftware, true);
 });
 
-window.framed.getFingerprint();
 window.framed.receiveFingerprint((data) => {
 	var img = document.createElement('img');
 	img.src = data.qrcode;
 
 	document.getElementById('fingerprintQR').appendChild(img);
 	document.getElementById('fingerprintCode').innerText = data.fingerprint;
+	//document.write(JSON.stringify(data));
 });
+window.framed.getFingerprint();
 
 function createWarnElem(message) {
 	var warnElem = document.createElement('div');
@@ -111,6 +113,7 @@ document.getElementById('saveBtn').addEventListener('click', () => {
 	}
 
 	var ip = document.getElementById('ipInput').value;
+	var isAnalyticsEnabled = document.getElementById('enableAnalytics').checked;
 	var disableHardwareAcceleration = document.getElementById('disableHardwareAcceleration').checked;
 
 	if (port < 1000 || port > 65535) {
@@ -123,6 +126,7 @@ document.getElementById('saveBtn').addEventListener('click', () => {
 		token,
 		ip,
 		port,
+		isAnalyticsEnabled,
 		disableHardwareAcceleration
 	});
 });

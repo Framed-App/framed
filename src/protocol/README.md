@@ -5,6 +5,7 @@
 ## Glossary
 
 Client: The Framed mobile app
+
 Server: The Framed desktop app
 
 ## Multicast Packets
@@ -38,7 +39,7 @@ The JSON contains the following:
 
 Unicast packets follow a similar format to multicast packets.
 
-`Framed|+|{{install id}}|+|{{AES IV}}|+|{{encrypted json}}
+`Framed|+|{{install id}}|+|{{AES IV}}|+|{{encrypted json}}`
 
 For the inital key exchange, the IV is replaced with the String `KeyExchange`.
 

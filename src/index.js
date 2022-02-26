@@ -4,6 +4,7 @@ const utils = require('./utils.js');
 const collectData = require('./collect-data.js');
 const electronUtil = require('electron-util/node');
 const log = require('electron-log');
+const Sentry = require('@sentry/electron');
 const StreamlabsSupport = require('./software-support/StreamlabsSupport.js');
 const OBSSupport = require('./software-support/OBSSupport.js');
 
@@ -28,6 +29,16 @@ const app = require('./app.js');
 if (app.isAlreadyOpen()) {
 	// Quit here, no need to connect to APIs
 	return app.getApp().quit();
+}
+
+if (app.isAnalyticsEnabled()) {
+	Sentry.init({
+		dsn: 'https://f50fab09b3594ba498ecc266b95d07b5@o1153309.ingest.sentry.io/6232316',
+		environment: electronUtil.isUsingAsar ? 'production' : 'development',
+		release: `${require('../package.json').version}${electronUtil.isUsingAsar ? '' : ' (dev)'}`
+	});
+	Sentry.setUser({ id: app.getInstallId() });
+	log.info('Sentry initialized');
 }
 
 app.init(_eventEmitter, electronUtil.isUsingAsar, log);

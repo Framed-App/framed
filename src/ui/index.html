@@ -2,8 +2,9 @@
 <html>
 	<head>
 		<meta charset="UTF-8">
-		<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'">
-		<meta http-equiv="X-Content-Security-Policy" content="default-src 'self'; script-src 'self'">
+		<!-- Only way to get Sentry working was by adding "http:" to CSP -->
+		<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src *.sentry.io http:;">
+		<meta http-equiv="X-Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src *.sentry.io http:;">
 		<title>Framed</title>
 		<link rel="stylesheet" href="css/dark-theme.css">
 		<link rel="stylesheet" href="css/fontawesome/css/all.min.css">
@@ -54,6 +55,10 @@
 				</span>
 			</span>
 		</div>
+		<!-- Couldn't get it to work any other way -->
+		<script src="../../node_modules/@sentry/browser/build/bundle.js"></script>
+		<script src="js/renderer/additional/sentry.js"></script>
+
 		<script src="js/renderer/deps/moment.js"></script>
 		<script src="js/renderer/index.js"></script>
 		<script src="js/renderer/deps/chart.js"></script>

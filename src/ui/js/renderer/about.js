@@ -1,7 +1,4 @@
-window.framed.getVersion();
-window.framed.receiveVersion((version) => {
-	document.getElementById('version').innerText = version;
-});
+document.getElementById('version').innerText = window.framed.getVersion();
 
 document.getElementById('licensesBtn').addEventListener('click', () => {
 	window.framed.showLicenseModal();

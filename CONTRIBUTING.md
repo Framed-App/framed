@@ -14,7 +14,7 @@ To contribute to Framed, you will need to configure your development environment
 
 You will need to build the native API module (`src/native-api/native-api.cpp`). Copy `json.hpp` from `nlohmann/json` v3.10.4 into `src/native-api/lib/nlohmann` and its license to `license.txt` in the same directory. A build script has been included in that directory.
 
-Also run `npm run create-about` to create the data for the about and licenses windows. Run this script again if you install anything from npm, it should automatically find the required data. If you add any code not from npm, please add the necessary data in `src/ui/js/renderer/additional/about/_createAbout.js`.
+Also run `npm run create-about` to create the data for the about and licenses windows. Run this script again if you install anything from npm (or update the version number), it should automatically find the required data. If you add any code not from npm, please add the necessary data in `src/ui/js/renderer/additional/about/_createAbout.js`.
 
 If the above was successful, you can start Framed by running `npm start`.
 

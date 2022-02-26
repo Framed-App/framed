@@ -39,6 +39,7 @@ const encStore = new Store({
 	},
 	name: 'keys',
 	fileExtension: 'enc.json',
+	// DO NOT CHANGE ENCRYPTION KEY
 	encryptionKey: 'framedkeysfile',
 	clearInvalidConfig: true
 });
@@ -95,6 +96,10 @@ const store = new Store({
 		},
 		publicKeyFingerprint: {
 			type: 'string'
+		},
+		isAnalyticsEnabled: {
+			type: 'boolean',
+			default: true
 		}
 	},
 	fileExtension: 'enc.json',
@@ -103,7 +108,7 @@ const store = new Store({
 });
 
 // explicitly set this in the store so it can be saved to the
-// config file on firts run and doesn't change every time
+// config file on first run and doesn't change every time
 if (!store.get('mobileAppPassword')) {
 	// 22 characters seemed a bit short
 	store.set('mobileAppPassword', `${hexToBase64(uuid.v4())}.${hexToBase64(uuid.v4())}`);
@@ -111,6 +116,14 @@ if (!store.get('mobileAppPassword')) {
 
 if (!store.get('installationId')) {
 	store.set('installationId', `${hexToBase64(uuid.v4())}`);
+}
+
+function getInstallId() {
+	return store.get('installationId');
+}
+
+function isAnalyticsEnabled() {
+	return store.get('isAnalyticsEnabled');
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -393,7 +406,6 @@ function start() {
 			modal: true,
 			show: false,
 			webPreferences: {
-				preload: path.join(__dirname, 'ui', 'js', 'preload', 'licenses.js'),
 				contextIsolation: true
 			},
 			backgroundColor: '#24242c',
@@ -439,7 +451,7 @@ function start() {
 		});
 
 		_settingsModal.webContents.on('will-navigate', (e, url) => {
-			var _allowedDomains = ['github.com'];
+			var _allowedDomains = ['github.com', 'play.google.com'];
 			var _url = new URL(url);
 
 			e.preventDefault();
@@ -531,6 +543,7 @@ function start() {
 			}
 		});
 
+		// Legacy code
 		ipcMain.on('get-version', () => {
 			if (!win) return;
 
@@ -542,6 +555,58 @@ function start() {
 
 			for (var f in _viewFRDWindows) {
 				_viewFRDWindows[f].webContents.send('version', app.getVersion());
+			}
+		});
+
+		ipcMain.on('get-install-id', () => {
+			if (!win) return;
+
+			win.webContents.send('install-id', store.get('installationId'));
+
+			if (_aboutModal !== null) {
+				_aboutModal.webContents.send('install-id', store.get('installationId'));
+			}
+
+			if (_settingsModal !== null) {
+				_settingsModal.webContents.send('install-id', store.get('installationId'));
+			}
+
+			for (var d in _diagModals) {
+				_diagModals[d].webContents.send('install-id', store.get('installationId'));
+			}
+
+			for (var f in _viewFRDWindows) {
+				_viewFRDWindows[f].webContents.send('install-id', store.get('installationId'));
+			}
+
+			for (var fd in _viewFRDDiagWindows) {
+				_viewFRDDiagWindows[fd].webContents.send('install-id', store.get('installationId'));
+			}
+		});
+
+		ipcMain.on('is-analytics-enabled', () => {
+			if (!win) return;
+
+			win.webContents.send('analytics-enabled', store.get('isAnalyticsEnabled'));
+
+			if (_aboutModal !== null) {
+				_aboutModal.webContents.send('analytics-enabled', store.get('isAnalyticsEnabled'));
+			}
+
+			if (_settingsModal !== null) {
+				_settingsModal.webContents.send('analytics-enabled', store.get('isAnalyticsEnabled'));
+			}
+
+			for (var d in _diagModals) {
+				_diagModals[d].webContents.send('analytics-enabled', store.get('isAnalyticsEnabled'));
+			}
+
+			for (var f in _viewFRDWindows) {
+				_viewFRDWindows[f].webContents.send('analytics-enabled', store.get('isAnalyticsEnabled'));
+			}
+
+			for (var fd in _viewFRDDiagWindows) {
+				_viewFRDDiagWindows[fd].webContents.send('analytics-enabled', store.get('isAnalyticsEnabled'));
 			}
 		});
 
@@ -608,11 +673,13 @@ function start() {
 			}
 
 			var _prevHardwareAccelerationSettings = store.get('disableHardwareAcceleration');
+			var _prevAnalyticsSetting = store.get('isAnalyticsEnabled');
 
 			store.set('streamingSoftware', data.streamingSoftware);
 			store.set('token', data.token);
 			store.set('ip', data.ip);
 			store.set('port', parseInt(data.port));
+			store.set('isAnalyticsEnabled', data.isAnalyticsEnabled);
 			store.set('disableHardwareAcceleration', data.disableHardwareAcceleration);
 
 			win.webContents.send('info', 'Saved settings');
@@ -621,8 +688,14 @@ function start() {
 				win.webContents.send('info', `You will need to restart Framed to ${data.disableHardwareAcceleration ? 'disable' : 'enable'} hardware acceleration`);
 			}
 
-			_prevHardwareAccelerationSettings = data.disableHardwareAcceleration;
+			if (data.isAnalyticsEnabled !== _prevAnalyticsSetting) {
+				win.webContents.send('info', 'Changes to the analytics settings will only fully apply the next time Framed starts.');
+			}
 
+			_prevHardwareAccelerationSettings = data.disableHardwareAcceleration;
+			_prevAnalyticsSetting = data.isAnalyticsEnabled;
+
+			// TODO: Only disconnect if streaming software settings have changed
 			_eventEmitter.emit('doDisconnect');
 			_eventEmitter.emit('doSetConfig', data);
 			setTimeout(() => {
@@ -881,6 +954,7 @@ function init(eventEmitter, prod, log) {
 		var _multicastPort = 19555;
 		var _multicastAddr = '228.182.166.121';
 		var _multicastServers = {};
+		var _cache = {};
 		for (var i in interfaces) {
 			for (var j = 0; j < interfaces[i].length; j++) {
 				let _int = interfaces[i][j];
@@ -895,17 +969,27 @@ function init(eventEmitter, prod, log) {
 					_multicastServers[_int.address].addMembership(_multicastAddr, _int.address);
 
 					setInterval(() => {
-						var msg = new Broadcast(
-							store.get('installationId'),
-							{
-								ip: _int.address,
-								port: store.get('mobileAppPort'),
-								hostname: os.hostname(),
-								version: app.getVersion(),
-								publicKey: store.get('publicKey'),
-								_privateKey: store.get('privateKey')
-							}
-						).getPacketData();
+						// Only creating the message once saves CPU resources,
+						// as the same message doesn't need to go through the
+						// expensive encryption process multiple times.
+						var msg;
+						if (!_cache[_int.address]) {
+							msg = new Broadcast(
+								store.get('installationId'),
+								{
+									ip: _int.address,
+									port: store.get('mobileAppPort'),
+									hostname: os.hostname(),
+									version: app.getVersion(),
+									publicKey: store.get('publicKey'),
+									_privateKey: store.get('privateKey')
+								}
+							).getPacketData();
+
+							_cache[_int.address] = msg;
+						} else {
+							msg = _cache[_int.address];
+						}
 
 						_multicastServers[_int.address].send(msg, 0, msg.length, _multicastPort, _multicastAddr, (err) => {
 							if (err) {
@@ -948,3 +1032,5 @@ process.on('uncaughtException', function (err) {
 module.exports.init = init;
 module.exports.isAlreadyOpen = isAlreadyOpen;
 module.exports.getApp = getApp;
+module.exports.getInstallId = getInstallId;
+module.exports.isAnalyticsEnabled = isAnalyticsEnabled;

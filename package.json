@@ -1,7 +1,7 @@
 {
 	"name": "framed",
 	"productName": "Framed",
-	"version": "0.0.6",
+	"version": "0.0.7",
 	"description": "Framed allows you to find the cause of dropped frames while streaming",
 	"main": "src/index.js",
 	"scripts": {
@@ -22,6 +22,7 @@
 	},
 	"homepage": "https://framed-app.com",
 	"dependencies": {
+		"@sentry/electron": "^3.0.2",
 		"@truewinter/orderedjson": "^0.0.1",
 		"ajv": "^8.6.3",
 		"axios": "^0.22.0",
