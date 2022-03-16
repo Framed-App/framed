@@ -951,6 +951,16 @@ function init(eventEmitter, prod, log) {
 			server.getEventEmitter().emit('srvDiagData', sendData, con);
 		});
 
+		server.getEventEmitter().on('srvGetSceneList', (con) => {
+			_eventEmitter.emit('srvGetSceneList', con);
+		});
+
+		server.getEventEmitter().on('srvSwitchScenes', (sceneName) => {
+			_eventEmitter.emit('srvSwitchScenes', sceneName);
+		});
+
+		_eventEmitter.on('srvSceneList', (...args) => server.getEventEmitter().emit('srvSceneList', ...args));
+
 		var _multicastPort = 19555;
 		var _multicastAddr = '228.182.166.121';
 		var _multicastServers = {};

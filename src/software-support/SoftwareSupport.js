@@ -25,6 +25,10 @@ class SoftwareSupport {
 	isConnected() {}
 	connect() {}
 	disconnect() {}
+
+	// Used in the mobile app
+	getSceneList() {}
+	switchToScene() {}
 }
 
 module.exports = SoftwareSupport;

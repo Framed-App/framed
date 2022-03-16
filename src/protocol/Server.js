@@ -5,6 +5,7 @@ const protoConfig = require('./proto.config.js');
 const utils = require('../utils.js');
 const PerfData = require('./messages/PerfData.js');
 const DiagData = require('./messages/DiagData.js');
+const SceneList = require('./messages/SceneList.js');
 
 class Server {
 	constructor(installId, password, port, privateKey, log) {
@@ -26,6 +27,7 @@ class Server {
 
 		this._eventEmitter.on('srvPerfData', (...args) => this._handlePerfData(...args));
 		this._eventEmitter.on('srvDiagData', (...args) => this._handleDiagData(...args));
+		this._eventEmitter.on('srvSceneList', (...args) => this._handleSceneList(...args));
 	}
 
 	getPacketParts(packet) {
@@ -96,13 +98,19 @@ class Server {
 			this.log.info(`${con.remoteAddress}:${con.remotePort} tried sending data before key exchange`);
 		} else {
 			var decrypted = this._decryptJson(p[3], this._keys[`${con.remoteAddress}:${con.remotePort}`], p[2]);
-
 			switch (decrypted.messageType) {
 				case 'GetPerfData':
 					this._eventEmitter.emit('srvGetPerfData', con);
 					break;
 				case 'GetDiagData':
 					this._eventEmitter.emit('srvGetDiagData', decrypted.lastTimestamp, con);
+					break;
+				case 'GetSceneList':
+					this._eventEmitter.emit('srvGetSceneList', con);
+					break;
+				case 'SwitchScenes':
+					this.log.info(`${con.remoteAddress}:${con.remotePort} requested scene change to: ${decrypted.sceneName}`);
+					this._eventEmitter.emit('srvSwitchScenes', decrypted.sceneName);
 					break;
 			}
 		}
@@ -118,6 +126,12 @@ class Server {
 		var diagData = new DiagData(this.installId, data);
 		diagData.enableEncryption(this._keys[`${con.remoteAddress}:${con.remotePort}`], utils.generateSecureRandomString(16));
 		con.write(`${diagData.getPacketData()}\n`);
+	}
+
+	_handleSceneList(data, con) {
+		var sceneList = new SceneList(this.installId, data);
+		sceneList.enableEncryption(this._keys[`${con.remoteAddress}:${con.remotePort}`], utils.generateSecureRandomString(16));
+		con.write(`${sceneList.getPacketData()}\n`);
 	}
 
 	_decryptRsaJson(encrypted) {

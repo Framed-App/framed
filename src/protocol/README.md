@@ -93,6 +93,32 @@ Direction: Server to Client
 
 > Note: The diagnostics data is sorted by the key (a timestamp), and the largest timestamp is saved to be sent as the `lastTimestamp` property in the `GetDiagData` message. By doing this, only new diagnostics data get sent to the client.
 
+### GetSceneList
+
+Direction: Client to Server
+
+| Property | Value |
+| -------- | ----- |
+| messageType | The string `GetSceneList` |
+
+### SceneList
+
+Direction: Server to Client
+
+| Property | Value |
+| -------- | ----- |
+| messageType | The string `SceneList` |
+| data | The scene list |
+
+### SwitchScenes
+
+Direction: Client to Server
+
+| Property | Value |
+| -------- | ----- |
+| messageType | The string `SwitchScenes` |
+| sceneName | The name of the scene to switch to |
+
 ## Implementation Details
 
 The first time a user opens Framed (desktop), a public and private key is generated. An installation ID is also generated.

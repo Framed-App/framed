@@ -54,6 +54,36 @@ _eventEmitter.on('doSetConfig', (_thisConfig) => {
 	obsSupport.setConfig(config);
 });
 
+_eventEmitter.on('srvGetSceneList', (con) => {
+	switch (config.streamingSoftware) {
+		case 'obs':
+			obsSupport.getSceneList((err, data) => {
+				if (err) return;
+
+				_eventEmitter.emit('srvSceneList', data, con);
+			});
+			break;
+		case 'streamlabs':
+			streamlabsSupport.getSceneList((err, data) => {
+				if (err) return;
+
+				_eventEmitter.emit('srvSceneList', data, con);
+			});
+			break;
+	}
+});
+
+_eventEmitter.on('srvSwitchScenes', (sceneName) => {
+	switch (config.streamingSoftware) {
+		case 'obs':
+			obsSupport.switchToScene(sceneName);
+			break;
+		case 'streamlabs':
+			streamlabsSupport.switchToScene(sceneName);
+			break;
+	}
+})
+
 axios.get('https://ingest.twitch.tv/ingests').then(function(response) {
 	//log.info(response.data);
 	_servers = response.data.ingests;

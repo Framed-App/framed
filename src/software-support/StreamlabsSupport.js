@@ -1,6 +1,7 @@
 const SoftwareSupport = require('./SoftwareSupport.js');
 const SockJS = require('sockjs-client');
 const utils = require('../utils.js');
+const { EventEmitter } = require('events');
 
 const GET_PERFORMANCE_INTERVAL = 4 * 1000;
 
@@ -13,9 +14,12 @@ class StreamlabsSupport extends SoftwareSupport {
 		this._droppedFramesLatest = 0;
 		this._ignoreNextDroppedFrames = false;
 		this._interval = null;
+		this._intEventEmitter = new EventEmitter();
 		this.sock = null;
 
 		this._id = 0;
+		this._scenes = [];
+		this._sceneIdObj = {};
 	}
 
 	_getID() {
@@ -89,9 +93,28 @@ class StreamlabsSupport extends SoftwareSupport {
 					this._authenticated = true;
 					this.log.info(`Connected to ${this.config.streamingSoftware}`);
 					this._extEventEmitter.emit('connectedState', true);
+
+					// Testing code, please ignore
+					/*this.getSceneList((err, data) => {
+						if (err) return;
+
+						console.log(data);
+
+						var _scenes = data.scenes.filter((_s) => _s !== data.currentScene)
+							.filter((_s) => !_s.startsWith('Util:'));
+						console.log(_scenes);
+
+						var _sc = _scenes[Math.floor(Math.random() * _scenes.length)];
+						console.log(_sc);
+						this.switchToScene(_sc);
+					});*/
+
 					break;
 				case 'performance':
 					this._handlePerformanceData(data.result);
+					break;
+				case 'sceneList':
+					this._handleSceneList(data.result);
 					break;
 				case 'state':
 					if (data.result.streamingStatus === 'live' && this._interval === null) {
@@ -198,6 +221,51 @@ class StreamlabsSupport extends SoftwareSupport {
 			this._droppedFramesLatest = data.numberDroppedFrames;
 			this._ignoreNextDroppedFrames = false;
 		}
+	}
+
+	_getScenes() {
+		if (!this._authenticated) return;
+
+		var _sceneRequest = utils.createJRPCMessage('getScenes', { resource: 'ScenesService' }, this._getID());
+		this._messageMap.set(_sceneRequest.id, 'sceneList');
+		this._send(_sceneRequest);
+	}
+
+	_handleSceneList(data) {
+		this._scenes = data.map((_s) => _s.name);
+		this._sceneIdObj = data.reduce((o, k) => ({
+			...o, [k.name]: {
+				name: k.name,
+				id: k.id
+			}
+		}), {});
+
+		this._intEventEmitter.emit('sceneList', this._scenes);
+	}
+
+	getSceneList(cb) {
+		this._getScenes();
+		this._intEventEmitter.once('sceneList', (scenes) => {
+			cb(null, {
+				// TODO: Implement currentScene
+				currentScene: null,
+				scenes
+			});
+		});
+	}
+
+	switchToScene(scene) {
+		if (!this._authenticated) return;
+		if (!Object.prototype.hasOwnProperty.call(this._sceneIdObj, scene)) return;
+
+		console.log(this._sceneIdObj[scene].id);
+
+		var _switchRequest = utils.createJRPCMessage('makeSceneActive', {
+			resource: 'ScenesService',
+			args: [this._sceneIdObj[scene].id]
+		}, this._getID());
+		//this._messageMap.set(_switchRequest.id, 'sceneList');
+		this._send(_switchRequest);
 	}
 }
 

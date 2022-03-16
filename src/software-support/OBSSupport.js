@@ -15,6 +15,7 @@ class OBSSupport extends SoftwareSupport {
 
 		this._streamStatus = {};
 		this._droppedFramesLatest = 0;
+		this._scenes = [];
 	}
 
 	isConnected() {
@@ -65,6 +66,17 @@ class OBSSupport extends SoftwareSupport {
 		this._extEventEmitter.emit('runStreamDiagnostics', timestamp);
 	}
 
+	_getScenes(cb) {
+		this.obs.send('GetSceneList').then((scenes) => {
+			cb(null, {
+				currentScene: scenes['current-scene'],
+				scenes: scenes.scenes.map((s) => s.name)
+			});
+		}).catch((e) => {
+			cb(e, null);
+		});
+	}
+
 	connect() {
 		if (this._authenticated) return this.log.warn('OBS connection already established');
 
@@ -112,6 +124,21 @@ class OBSSupport extends SoftwareSupport {
 					clearInterval(this._interval);
 				}
 			});
+
+			// Just some testing code, please ignore
+			/*this.getSceneList((err, data) => {
+				if (err) {
+					return console.error(err);
+				}
+
+				var _scenes = data.scenes.filter((_s) => _s !== data.currentScene)
+					.filter((_s) => !_s.startsWith('Util:'));
+				console.log(_scenes);
+
+				var _sc = _scenes[Math.floor(Math.random() * _scenes.length)];
+				console.log(_sc);
+				this.switchToScene(_sc);
+			});*/
 		}).catch((err) => {
 			this.log.error(`Failed to connect to OBS: ${err.error}`);
 			this._extEventEmitter.emit('error', `Failed to connect to OBS: ${err.error}`);
@@ -137,6 +164,25 @@ class OBSSupport extends SoftwareSupport {
 		if (this._interval) {
 			clearInterval(this._interval);
 		}
+	}
+
+	getSceneList(cb) {
+		this._getScenes((err, data) => {
+			if (err) {
+				return cb(err, null);
+			}
+
+			this._scenes = data.scenes;
+			cb(null, data);
+		});
+	}
+
+	switchToScene(scene) {
+		if (!this._scenes.includes(scene)) return;
+
+		this.obs.send('SetCurrentScene', {
+			'scene-name': scene
+		});
 	}
 }
 
