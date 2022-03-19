@@ -6,6 +6,8 @@ const utils = require('../utils.js');
 const PerfData = require('./messages/PerfData.js');
 const DiagData = require('./messages/DiagData.js');
 const SceneList = require('./messages/SceneList.js');
+const ConnectionStatus = require('./messages/ConnectionStatus.js');
+const SceneListError = require('./messages/SceneListError.js');
 
 class Server {
 	constructor(installId, password, port, privateKey, log) {
@@ -28,6 +30,7 @@ class Server {
 		this._eventEmitter.on('srvPerfData', (...args) => this._handlePerfData(...args));
 		this._eventEmitter.on('srvDiagData', (...args) => this._handleDiagData(...args));
 		this._eventEmitter.on('srvSceneList', (...args) => this._handleSceneList(...args));
+		this._eventEmitter.on('srvSceneListError', (...args) => this._handleSceneListError(...args));
 	}
 
 	getPacketParts(packet) {
@@ -46,6 +49,7 @@ class Server {
 				this._decryptRsaJson(parts[3]);
 			} else {
 				var _remote = `${con.remoteAddress}:${con.remotePort}`;
+				if (!this._keys[_remote]) return;
 				this._decryptJson(parts[3], this._keys[_remote], parts[2]);
 			}
 		} catch (e) {
@@ -80,6 +84,18 @@ class Server {
 		delete this._keys[`${con.remoteAddress}:${con.remotePort}`];
 	}
 
+	_sendConnectionStatus(con, success, error = null) {
+		var _data = {
+			success
+		};
+
+		if (error) _data.error = error;
+
+		var connectionStatus = new ConnectionStatus(this.installId, _data);
+		connectionStatus.enableEncryption(this._keys[`${con.remoteAddress}:${con.remotePort}`], utils.generateSecureRandomString(16));
+		con.write(`${connectionStatus.getPacketData()}\n`);
+	}
+
 	_handleData(data, con) {
 		data = data.toString().trim();
 		var p = this._getPacketPartsIfValid(data, con);
@@ -87,15 +103,26 @@ class Server {
 		if (!p) return;
 
 		if (p[2] === 'KeyExchange') {
+			var _decrypted = this._decryptRsaJson(p[3]);
+
+			if (_decrypted.password !== this.password) {
+				this._keys[`${con.remoteAddress}:${con.remotePort}`] = _decrypted.key;
+				this._sendConnectionStatus(con, false, 'Incorrect app code. Make sure you have scanned the QR code from the Framed desktop app, or correctly entered it manually.');
+				delete this._keys[`${con.remoteAddress}:${con.remotePort}`];
+				return;
+			}
+
 			if (Object.prototype.hasOwnProperty.call(this._keys, `${con.remoteAddress}:${con.remotePort}`)) {
 				this.log.info(`Updating key for ${con.remoteAddress}:${con.remotePort}`);
 			} else {
 				this.log.info(`Setting key for ${con.remoteAddress}:${con.remotePort}`);
 			}
 
-			this._keys[`${con.remoteAddress}:${con.remotePort}`] = this._decryptRsaJson(p[3]).key;
+			this._keys[`${con.remoteAddress}:${con.remotePort}`] = _decrypted.key;
+			this._sendConnectionStatus(con, true);
 		} else if (!Object.prototype.hasOwnProperty.call(this._keys, `${con.remoteAddress}:${con.remotePort}`)) {
 			this.log.info(`${con.remoteAddress}:${con.remotePort} tried sending data before key exchange`);
+			con.destroy();
 		} else {
 			var decrypted = this._decryptJson(p[3], this._keys[`${con.remoteAddress}:${con.remotePort}`], p[2]);
 			switch (decrypted.messageType) {
@@ -134,6 +161,14 @@ class Server {
 		con.write(`${sceneList.getPacketData()}\n`);
 	}
 
+	_handleSceneListError(errorMsg, con) {
+		var sceneListError = new SceneListError(this.installId, {
+			error: errorMsg
+		});
+		sceneListError.enableEncryption(this._keys[`${con.remoteAddress}:${con.remotePort}`], utils.generateSecureRandomString(16));
+		con.write(`${sceneListError.getPacketData()}\n`);
+	}
+
 	_decryptRsaJson(encrypted) {
 		var _privateKey = Buffer.from(this.privateKey, 'base64').toString().replace(/\\n/g, '\n');
 		var buffer = Buffer.from(encrypted, 'base64');
@@ -151,6 +186,14 @@ class Server {
 		var decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
 		var decrypted = decipher.update(encrypted, 'base64', 'utf-8');
 		return JSON.parse(decrypted + decipher.final('utf-8'));
+	}
+
+	resetConnections() {
+		this._keys = {};
+	}
+
+	setPassword(password) {
+		this.password = password;
 	}
 }
 

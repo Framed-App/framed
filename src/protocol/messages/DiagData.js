@@ -2,10 +2,14 @@ const Message = require('./Message.js');
 
 class DiagData extends Message {
 	constructor(installId, data) {
-		super(installId, {
+		var _data = {
 			messageType: 'DiagData',
-			data
-		});
+			success: data.success
+		};
+
+		if (data.error) _data.error = data.error;
+
+		super(installId, _data);
 	}
 }
 

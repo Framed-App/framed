@@ -20,10 +20,16 @@ window.framed.receiveSettings((settings) => {
 	updateSettingDisplay(settings.streamingSoftware, true);
 });
 
+document.getElementById('resetAppKey').addEventListener('click', () => {
+	window.framed.resetAppKey();
+});
+
 window.framed.receiveFingerprint((data) => {
 	var img = document.createElement('img');
 	img.src = data.qrcode;
 
+	// reset the element in case of a key reset
+	document.getElementById('fingerprintQR').innerHTML = '';
 	document.getElementById('fingerprintQR').appendChild(img);
 	document.getElementById('fingerprintCode').innerText = data.fingerprint;
 	//document.write(JSON.stringify(data));

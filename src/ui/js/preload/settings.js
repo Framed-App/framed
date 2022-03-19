@@ -33,5 +33,8 @@ contextBridge.exposeInMainWorld('framed', {
 	},
 	receiveFingerprint: (cb) => {
 		ipcRenderer.on('fingerprint', (_, data) => cb(data));
+	},
+	resetAppKey: () => {
+		ipcRenderer.send('reset-app-key');
 	}
 });

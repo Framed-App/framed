@@ -55,6 +55,17 @@ Direction: Client to Server
 | -------- | ----- |
 | messageType | The string `KeyExchange` |
 | key | The symmetric key for this connection |
+| password | The mobile app password; the second part of the QR code data |
+
+### ConnectionStatus
+
+Direction: Server to Client
+
+| Property | Value |
+| -------- | ----- |
+| messageType | The string `ConnectionStatus` |
+| success | A boolean indicating whether the connection is successful |
+| error | An optional property containing an error message |
 
 ### GetPerfData
 
@@ -110,6 +121,15 @@ Direction: Server to Client
 | messageType | The string `SceneList` |
 | data | The scene list |
 
+### SceneListError
+
+Direction: Server to Client
+
+| Property | Value |
+| -------- | ----- |
+| messageType | The string `SceneListError` |
+| error | A string explaining why the SceneListError occurred |
+
 ### SwitchScenes
 
 Direction: Client to Server
@@ -125,8 +145,8 @@ The first time a user opens Framed (desktop), a public and private key is genera
 
 The client identifies servers by their installation ID. After connecting to a server, all packets must contain the installation ID. If it does not match the actual installation ID, the packet is dropped.
 
-After connecting to a server, the client sends a `KeyExchange` packet. This contains a random key encrypted with the server's public key. This random key is used to encrypt all messages in this connection. (See security note in the multicast packets section)
+After connecting to a server, the client sends a `KeyExchange` packet. This contains a random key encrypted with the server's public key, and a password. This random key is used to encrypt all messages in this connection. (See security note in the multicast packets section)
 
-The `KeyExchange` packet must be sent before any more messages are sent. If the server does not have a key for a connection, it will reject messages.
+The `KeyExchange` packet must be sent before any more messages are sent. If the server does not have a key for a connection, it will reject messages. After a key exchange, a `ConnectionStatus` packet will be sent. Please ensure that no further packets are sent after the `KeyExchange` packet until the `ConnectionStatus` packet is received and has a successful status.
 
 If no data is exchanged within 10 seconds, the connection is closed by the client. The server forcefully closes the connection after 10.25 seconds of inactivity.

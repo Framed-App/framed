@@ -27,6 +27,26 @@ function hexToBase64(hex) {
 		.replace(/=/g, '');
 }
 
+// This function is to replace the vowels to prevent
+// any bad words being produced by the fingerprint function
+// eslint-disable-next-line no-inner-declarations
+function rotateVowels(string) {
+	var ROTATE = 1;
+	var CHARS = ['A', 'E', 'I', 'O', 'U', 'Y'];
+	var stringArr = string.split('');
+	var out = '';
+
+	for (var i = 0; i < stringArr.length; i++) {
+		if (CHARS.includes(stringArr[i])) {
+			out += String.fromCharCode(stringArr[i].charCodeAt() + ROTATE);
+		} else {
+			out += stringArr[i];
+		}
+	}
+
+	return out;
+}
+
 // The encryption isn't for security purposes.
 // (Anyone can view the source code and get the `keys.enc.json` key).
 // Instead, it is to prevent a user from modifying the config file directly,
@@ -108,10 +128,17 @@ const store = new Store({
 });
 
 // explicitly set this in the store so it can be saved to the
-// config file on first run and doesn't change every time
-if (!store.get('mobileAppPassword')) {
-	// 22 characters seemed a bit short
-	store.set('mobileAppPassword', `${hexToBase64(uuid.v4())}.${hexToBase64(uuid.v4())}`);
+// config file on first run and doesn't change every time.
+// if using the old (unused) password length, reset it
+if (!store.get('mobileAppPassword') || store.get('mobileAppPassword').length > 6) {
+	resetMobileAppPassword();
+}
+
+function resetMobileAppPassword() {
+	store.set('mobileAppPassword',
+		rotateVowels(hexToBase64(uuid.v4())
+			.replace(/-/g, 'X').replace(/_/g, 'Z')
+			.toUpperCase().substring(0, 6)));
 }
 
 if (!store.get('installationId')) {
@@ -610,13 +637,23 @@ function start() {
 			}
 		});
 
+		ipcMain.on('reset-app-key', () => {
+			resetMobileAppPassword();
+			server.setPassword(store.get('mobileAppPassword'));
+			server.resetConnections();
+
+			_log.info('App key changed in settings. Blocking all current mobile app connections');
+
+			ipcMain.emit('get-fingerprint');
+		});
+
 		ipcMain.on('showLicenseModal', () => {
 			createLicensesModal();
 		});
 
 		ipcMain.on('get-fingerprint', () => {
 			if (_settingsModal !== null) {
-				var fingerprint = store.get('publicKeyFingerprint');
+				var fingerprint = `${store.get('publicKeyFingerprint')}-${store.get('mobileAppPassword')}`;
 				QRCode.toDataURL(fingerprint, function(err, url) {
 					if (err) return _log.error(`Failed get QR code URL: ${err}`);
 
@@ -904,30 +941,10 @@ function init(eventEmitter, prod, log) {
 		if (!store.get('publicKeyFingerprint')) {
 			var fingerprint = rotateVowels(crypto.createHash('sha256')
 				.update(Buffer.from(store.get('publicKey'), 'base64').toString().replace(/\\n/g, '\n'))
-				.digest('base64').replace(/\+/g, 'X').replace(/\//g, 'Z')
+				.digest('base64').replace(/-/g, 'X').replace(/_/g, 'Z')
 				.toUpperCase().substring(0, 6));
 
 			store.set('publicKeyFingerprint', fingerprint);
-		}
-
-		// This function is to replace the vowels to prevent
-		// any bad words being produced by the fingerprint function
-		// eslint-disable-next-line no-inner-declarations
-		function rotateVowels(string) {
-			var ROTATE = 1;
-			var CHARS = ['A', 'E', 'I', 'O', 'U', 'Y'];
-			var stringArr = string.split('');
-			var out = '';
-
-			for (var i = 0; i < stringArr.length; i++) {
-				if (CHARS.includes(stringArr[i])) {
-					out += String.fromCharCode(stringArr[i].charCodeAt() + ROTATE);
-				} else {
-					out += stringArr[i];
-				}
-			}
-
-			return out;
 		}
 
 		_log.info(`Public key fingerprint: ${store.get('publicKeyFingerprint')}`);
@@ -960,6 +977,7 @@ function init(eventEmitter, prod, log) {
 		});
 
 		_eventEmitter.on('srvSceneList', (...args) => server.getEventEmitter().emit('srvSceneList', ...args));
+		_eventEmitter.on('srvSceneListError', (...args) => server.getEventEmitter().emit('srvSceneListError', ...args));
 
 		var _multicastPort = 19555;
 		var _multicastAddr = '228.182.166.121';

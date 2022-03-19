@@ -57,6 +57,10 @@ _eventEmitter.on('doSetConfig', (_thisConfig) => {
 _eventEmitter.on('srvGetSceneList', (con) => {
 	switch (config.streamingSoftware) {
 		case 'obs':
+			if (!obsSupport.isConnected()) {
+				return _eventEmitter.emit('srvSceneListError', 'The Framed desktop app is not connected to OBS', con);
+			}
+
 			obsSupport.getSceneList((err, data) => {
 				if (err) return;
 
@@ -64,6 +68,10 @@ _eventEmitter.on('srvGetSceneList', (con) => {
 			});
 			break;
 		case 'streamlabs':
+			if (!streamlabsSupport.isConnected()) {
+				return _eventEmitter.emit('srvSceneListError', 'The Framed desktop app is not connected to Streamlabs', con);
+			}
+
 			streamlabsSupport.getSceneList((err, data) => {
 				if (err) return;
 

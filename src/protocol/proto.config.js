@@ -3,7 +3,7 @@ var config = {
 	delimiter: '|+|',
 	// Framed|+|{{install id}}|+|{{iv}}|+|{{msg json}}
 	msgInParts: 4,
-	minClientVersion: '0.0.1'
+	minClientVersion: '0.0.4'
 };
 
 module.exports = config;
