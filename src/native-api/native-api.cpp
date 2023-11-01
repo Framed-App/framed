@@ -26,9 +26,7 @@
 //     it to be usable. The other alternative was including all the required Python files with the Framed app,
 //     but this was undesirable for multiple reasons
 // PS: Are you a C++ developer with knowledge of Windows APIs (and possibly Node.js native modules)?
-//     I could use some help improving this code and making it run even faster. Initially, this was
-//     intended to be a Node.js native module, but I had issues getting that working so made it
-//     a standalone executable.
+//     I could use some help improving this code and making it run even faster.
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN

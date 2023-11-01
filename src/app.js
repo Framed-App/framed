@@ -983,8 +983,8 @@ function init(eventEmitter, prod, log) {
 		var _multicastAddr = '228.182.166.121';
 		var _multicastServers = {};
 		var _cache = {};
-		for (var i in interfaces) {
-			for (var j = 0; j < interfaces[i].length; j++) {
+		for (let i in interfaces) {
+			for (let j = 0; j < interfaces[i].length; j++) {
 				let _int = interfaces[i][j];
 				// IPv6 support will be added in the future
 				if (_int.family !== 'IPv4') continue;
@@ -993,40 +993,49 @@ function init(eventEmitter, prod, log) {
 				log.info(`Adding multicast membership to ${_int.address}`);
 
 				_multicastServers[_int.address] = dgram.createSocket('udp4');
-				_multicastServers[_int.address].bind(_multicastPort, () => {
-					_multicastServers[_int.address].addMembership(_multicastAddr, _int.address);
-
-					setInterval(() => {
-						// Only creating the message once saves CPU resources,
-						// as the same message doesn't need to go through the
-						// expensive encryption process multiple times.
-						var msg;
-						if (!_cache[_int.address]) {
-							msg = new Broadcast(
-								store.get('installationId'),
-								{
-									ip: _int.address,
-									port: store.get('mobileAppPort'),
-									hostname: os.hostname(),
-									version: app.getVersion(),
-									publicKey: store.get('publicKey'),
-									_privateKey: store.get('privateKey')
-								}
-							).getPacketData();
-
-							_cache[_int.address] = msg;
-						} else {
-							msg = _cache[_int.address];
-						}
-
-						_multicastServers[_int.address].send(msg, 0, msg.length, _multicastPort, _multicastAddr, (err) => {
-							if (err) {
-								console.error(err);
-							}
-						});
-					}, 1000);
-				});
+				_multicastServers[_int.address].on('error', (err) => log.error(`Error on socket for ${_int.address}`, err));
+				bindMulticastServer(_int);
 			}
+		}
+
+		function bindMulticastServer(_int) {
+			_multicastServers[_int.address].bind(0, _int.address, () => runMulticastServer(_int));
+		}
+
+		function runMulticastServer(_int) {
+			_multicastServers[_int.address].addMembership(_multicastAddr, _int.address);
+
+			log.info(`Added multicast membership to ${_int.address}`);
+
+			setInterval(() => {
+				// Only creating the message once saves CPU resources,
+				// as the same message doesn't need to go through the
+				// expensive encryption process multiple times.
+				var msg;
+				if (!_cache[_int.address]) {
+					msg = new Broadcast(
+						store.get('installationId'),
+						{
+							ip: _int.address,
+							port: store.get('mobileAppPort'),
+							hostname: os.hostname(),
+							version: app.getVersion(),
+							publicKey: store.get('publicKey'),
+							_privateKey: store.get('privateKey')
+						}
+					).getPacketData();
+
+					_cache[_int.address] = msg;
+				} else {
+					msg = _cache[_int.address];
+				}
+
+				_multicastServers[_int.address].send(msg, 0, msg.length, _multicastPort, _multicastAddr, (err) => {
+					if (err) {
+						log.error(err);
+					}
+				});
+			}, 1000);
 		}
 	}
 

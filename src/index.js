@@ -90,7 +90,7 @@ _eventEmitter.on('srvSwitchScenes', (sceneName) => {
 			streamlabsSupport.switchToScene(sceneName);
 			break;
 	}
-})
+});
 
 axios.get('https://ingest.twitch.tv/ingests').then(function(response) {
 	//log.info(response.data);
